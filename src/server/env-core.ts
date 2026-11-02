@@ -89,7 +89,7 @@ export const env = {
     return pick("GEMINI_API_KEY");
   },
   get geminiModel() {
-    return pick("GEMINI_MODEL") ?? "gemini-2.5-flash";
+    return pick("GEMINI_MODEL") ?? "gemini-3.8-flash";
   },
   get anthropicModel() {
     return pick("ANTHROPIC_MODEL") ?? "claude-opus-5-5";
