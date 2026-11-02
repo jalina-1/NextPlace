@@ -16,6 +16,7 @@ import { db, schema } from "../db";
 import { env } from "../env-core";
 import { logger } from "../logger";
 import { and, desc, eq } from "drizzle-orm";
+import { placeInfo } from "./places";
 
 /** The parts of the assistant context the bot uses (kept structural to avoid an import cycle). */
 export type BotContext = {
@@ -60,6 +61,7 @@ const SYSTEM = `You are the NextPlace assistant. You help a doctor in Sri Lanka 
 How to work:
 - Use the tools to read the user's answers (get_preferences) and their options (list_options, get_option). Refer to options by their ref, like "#3". Only refs returned by the tools exist.
 - When the user asks about something not in the stored data (for example schools, transport, hospital services, nearby rentals), use web_search. Prefer official and well-known Sri Lankan sources.
+- For places and travel, first use place_info (offline, instant) for district, population and rough distance/time. It has no bus route numbers.
 - For travel questions, use the user's home town from their saved answers and the hospital's town. Search for the bus route numbers (SLTB/NTC routes, e.g. "Kurunegala to Kandy bus route number"), express/intercity options and trains, and give the route number, where to board and roughly how long it takes, with the source. If you can't find a route number, say so plainly.
 - Save every useful fact you find online with save_finding, always with the exact source URL. Never save a fact without a source.
 - To change the list order or the weights, call propose_change. The user sees a preview and decides whether to apply it. Never say a change has been made.
@@ -92,6 +94,16 @@ export async function runBot(
   const resolve = (ref: string) => ctx.refs.get(ref.trim().startsWith("#") ? ref.trim() : `#${ref.trim()}`) ?? null;
 
   const specs: ToolSpec[] = [
+    {
+      name: "place_info",
+      description:
+        "Offline Sri Lanka places list (no internet needed): district, province, population (when known), nearby larger towns, and — if `from` is given — rough road distance and bus time between two places. Use the user's home town as `from` for travel questions.",
+      inputSchema: { type: "object", properties: { name: { type: "string" }, from: { type: "string" } }, required: ["name"], additionalProperties: false },
+      run: async (input) => {
+        const i = input as { name: string; from?: string };
+        return JSON.stringify(placeInfo(String(i.name), i.from ? String(i.from) : undefined));
+      },
+    },
     ({
       name: "get_preferences",
       description: "Read the user's answers: home town, travel, chosen posts in order, places they like and can't go to, weather, facilities, rental need and what matters most.",
