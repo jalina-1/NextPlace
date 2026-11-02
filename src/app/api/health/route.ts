@@ -30,7 +30,7 @@ export async function GET(req: Request) {
   try {
     storageStatus = (await storage().check()).ok ? "ok" : "error";
   } catch (e) {
-    storageStatus = e instanceof Error && /not configured/.test(e.message) ? "not_configured" : "error";
+    storageStatus = e instanceof Error && (e.name === "StorageNotConfiguredError" || /not configured|aren’t switched on/.test(e.message)) ? "not_configured" : "error";
   }
   let migrations: number | null = null;
   try {

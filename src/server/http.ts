@@ -31,6 +31,8 @@ export function handle<A extends unknown[]>(fn: (...args: A) => Promise<Response
 }
 
 export function errorResponse(e: unknown): Response {
+  if (e instanceof HttpError && e.code === "storage_not_configured")
+    logger.error("storage.not_configured", { hint: "Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY) for this environment." });
   if (e instanceof HttpError) return NextResponse.json({ error: e.code, message: e.message, ...e.extra }, { status: e.status });
   if (e instanceof ZodError) {
     const issues = e.issues.map((i) => ({ path: i.path.join("."), message: friendlyIssue(i) }));

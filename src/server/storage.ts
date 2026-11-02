@@ -7,6 +7,15 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { env } from "./env-core";
+import { HttpError } from "./http";
+
+/** Shown to users as a clear message instead of a generic error. Details for admins go to the logs. */
+export class StorageNotConfiguredError extends HttpError {
+  constructor() {
+    super(503, "storage_not_configured", "File uploads aren’t switched on for this site yet, so your file couldn’t be saved. Please tell the administrator (private file storage needs to be set up).");
+    this.name = "StorageNotConfiguredError";
+  }
+}
 
 export interface Storage {
   put(key: string, data: Buffer, contentType: string): Promise<void>;
@@ -25,7 +34,7 @@ class LocalStorage implements Storage {
   private p(key: string) {
     if (process.env.VERCEL) {
       // Serverless filesystems are ephemeral; never pretend files were stored privately and durably.
-      throw new Error("Private storage is not configured: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY) for this environment.");
+      throw new StorageNotConfiguredError();
     }
     return path.join(path.resolve(this.dir), safeKey(key));
   }
