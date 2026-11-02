@@ -329,7 +329,10 @@ export async function optionCount(projectId: string) {
 /** Distinct posts (designations) found in the user's own imported list, with how many rows and vacancies each has. */
 export async function listDesignations(projectId: string, user: CurrentUser) {
   await getOwnedProject(projectId, user);
-  const rows = await db.select({ designation: schema.option.designation, vacancies: schema.option.vacancies }).from(schema.option).where(eq(schema.option.projectId, projectId));
+  const rows = await db
+    .select({ designation: schema.option.designation, vacancies: schema.option.vacancies, institution: schema.option.institution, district: schema.option.district })
+    .from(schema.option)
+    .where(eq(schema.option.projectId, projectId));
   const map = new Map<string, { name: string; rows: number; vacancies: number }>();
   for (const r of rows) {
     if (!r.designation) continue;
@@ -340,5 +343,11 @@ export async function listDesignations(projectId: string, user: CurrentUser) {
     cur.vacancies += Number.isFinite(v) && v > 0 ? v : 0;
     map.set(key, cur);
   }
-  return { designations: [...map.values()].sort((a, b) => b.rows - a.rows || a.name.localeCompare(b.name, "en")) };
+  const uniq = (xs: (string | null)[]) => Array.from(new Set(xs.filter((x): x is string => !!x))).sort((a, b) => a.localeCompare(b, "en"));
+  return {
+    imported: rows.length > 0,
+    designations: [...map.values()].sort((a, b) => b.rows - a.rows || a.name.localeCompare(b.name, "en")),
+    institutions: uniq(rows.map((r) => r.institution)),
+    districts: uniq(rows.map((r) => r.district)),
+  };
 }

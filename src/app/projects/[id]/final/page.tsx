@@ -9,10 +9,9 @@ import { api, ApiError, errMsg } from "@/lib/client/api";
 import { useProject } from "@/lib/client/project";
 import { Alert, Badge, Button, ButtonLink, Card, Empty, Input, PremiumBadge, ScoreValue, Spinner, Tabs, cx } from "@/components/ui";
 import { CompareTable } from "@/components/CompareTable";
-import { Assistant } from "@/components/Assistant";
 import type { ResultRow } from "@/lib/client/types";
 
-type Final = { items: string[]; excluded: string[]; revision: number; status: "editing" | "finalized"; finalizedRevisionId: string | null; validation: string[]; revisions: { id: string; number: number; createdAt: string }[] };
+type Final = { items: string[]; excluded: string[]; lockedIds: string[]; revision: number; status: "editing" | "finalized"; finalizedRevisionId: string | null; validation: string[]; revisions: { id: string; number: number; createdAt: string }[] };
 type Snap = { items: string[]; excluded: string[] };
 type SaveState = "saved" | "unsaved" | "saving" | "conflict" | "error";
 
@@ -30,10 +29,22 @@ function useMediaQuery(q: string) {
 
 const BACKUP_KEY = (id: string) => `np-final-draft-${id}`;
 
-function Row({ id, pos, row, onMove, onMoveTo, onExclude, onPin, pinned, swapSel, onSwapSel, disabled, highlight }: {
-  id: string; pos: number; row: ResultRow | undefined; onMove: (d: number) => void; onMoveTo: (n: number) => void; onExclude: () => void; onPin: () => void; pinned: boolean; swapSel: boolean; onSwapSel: () => void; disabled: boolean; highlight: boolean;
+function Row({ id, pos, row, onMove, onMoveTo, onExclude, onPin, pinned, swapSel, onSwapSel, disabled, highlight, locked }: {
+  id: string; pos: number; row: ResultRow | undefined; onMove: (d: number) => void; onMoveTo: (n: number) => void; onExclude: () => void; onPin: () => void; pinned: boolean; swapSel: boolean; onSwapSel: () => void; disabled: boolean; highlight: boolean; locked: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: disabled || locked });
+  if (locked)
+    return (
+      <li ref={setNodeRef} className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-navy-100 bg-navy-50 px-2 py-2 opacity-90">
+        <span className="px-1 text-navy-700" aria-hidden>🔒</span>
+        <span className="tabular w-10 text-right font-semibold text-navy-700" aria-label={`Preference rank ${pos}`}>{pos}</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium break-words text-navy-900 sm:truncate">{row?.institution ?? "Unknown"} <span className="font-normal text-navy-700">— {row?.designation}</span></p>
+          <p className="text-xs text-navy-700">On your “can’t go” list — always kept at the bottom. Change this in Places.</p>
+        </div>
+        <div className="w-24 text-right"><ScoreValue score={row?.score ?? null} status="complete" /></div>
+      </li>
+    );
   const [to, setTo] = useState("");
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cx("flex flex-wrap items-center gap-2 rounded-lg border bg-white px-2 py-2", isDragging ? "z-10 border-teal-600 shadow-lg" : "border-navy-100", highlight && "ring-2 ring-amber-300", swapSel && "border-teal-600 bg-teal-50")}>
@@ -75,7 +86,7 @@ export default function FinalPage() {
   const [q, setQ] = useState("");
   const [pinned, setPinned] = useState<string[]>([]);
   const [swapA, setSwapA] = useState<string | null>(null);
-  const [tab, setTab] = useState<"list" | "compare" | "assistant">("list");
+  const [tab, setTab] = useState<"list" | "compare">("list");
   const [restore, setRestore] = useState<Snap | null>(null);
   const desktop = useMediaQuery("(min-width: 1024px)");
   const revisionRef = useRef(0);
@@ -110,6 +121,10 @@ export default function FinalPage() {
   }, [id]);
   useEffect(() => {
     load();
+  }, [load]);
+  useEffect(() => {
+    window.addEventListener("np-proposal-applied", load);
+    return () => window.removeEventListener("np-proposal-applied", load);
   }, [load]);
 
   const persist = useCallback(
@@ -202,9 +217,13 @@ export default function FinalPage() {
   if (error && !final) return <Alert tone="error">{error}</Alert>;
   if (!final) return <Spinner />;
 
+  const lockedSet = new Set(final.lockedIds ?? []);
+  const lastFree = cur.items.filter((x) => !lockedSet.has(x)).length - 1;
   const move = (rid: string, to: number) => {
+    if (lockedSet.has(rid)) return;
     const from = cur.items.indexOf(rid);
-    const t = Math.max(0, Math.min(cur.items.length - 1, to));
+    // Unlocked entries can never move below the locked "can't go" block.
+    const t = Math.max(0, Math.min(lastFree, to));
     if (from < 0 || from === t) return;
     commit({ ...cur, items: arrayMove(cur.items, from, t) });
   };
@@ -213,6 +232,7 @@ export default function FinalPage() {
     move(String(e.active.id), cur.items.indexOf(String(e.over.id)));
   };
   const doSwap = (rid: string) => {
+    if (lockedSet.has(rid)) return;
     if (!swapA) return setSwapA(rid);
     if (swapA === rid) return setSwapA(null);
     const a = cur.items.indexOf(swapA);
@@ -287,6 +307,7 @@ export default function FinalPage() {
                   pinned={pinned.includes(rid)}
                   swapSel={swapA === rid}
                   onSwapSel={() => doSwap(rid)}
+                  locked={lockedSet.has(rid)}
                 />
               ),
             )}
@@ -314,11 +335,6 @@ export default function FinalPage() {
       {pinned.length === 0 ? <p className="text-sm text-navy-700">Pin entries from the list to compare them here.</p> : <CompareTable compact rows={pinned.map((p) => rows.get(p)).filter((x): x is ResultRow => !!x)} />}
     </Card>
   );
-  const assistantPanel = (
-    <Card>
-      <div className="h-[28rem]"><Assistant projectId={id} onApplied={load} /></div>
-    </Card>
-  );
 
   return (
     <div className="space-y-4">
@@ -329,16 +345,15 @@ export default function FinalPage() {
       {error && <Alert tone="error">{error}</Alert>}
       {!desktop ? (
         <div>
-          <Tabs label="Editor panels" value={tab} onChange={setTab} items={[{ value: "list", label: "List" }, { value: "compare", label: "Compare" }, { value: "assistant", label: "Assistant" }]} />
-          <div className="mt-3">{tab === "list" ? listPanel : tab === "compare" ? comparePanel : assistantPanel}</div>
+          <Tabs label="Editor panels" value={tab} onChange={setTab} items={[{ value: "list", label: "List" }, { value: "compare", label: "Compare" }]} />
+          <div className="mt-3">{tab === "list" ? listPanel : comparePanel}</div>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4">
-            <div className="space-y-4">{comparePanel}</div>
-            <div>{listPanel}</div>
+          <div className="space-y-4">
+            {listPanel}
+            {comparePanel}
           </div>
-          {assistantPanel}
         </>
       )}
     </div>

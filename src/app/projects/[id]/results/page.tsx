@@ -6,7 +6,6 @@ import { api, errMsg } from "@/lib/client/api";
 import { Alert, Badge, Button, ButtonLink, Card, DemoBadge, Empty, Input, PremiumBadge, ScoreValue, Select, Spinner, Tabs, cx } from "@/components/ui";
 import { Breakdown, Sources, fmtKm, fmtMin } from "@/components/Evidence";
 import type { ResultRow } from "@/lib/client/types";
-import { Assistant } from "@/components/Assistant";
 
 type Resp = {
   state: "not_analyzed" | "analyzing" | "ready";
@@ -17,7 +16,7 @@ type Resp = {
   totalOptions: number;
   rows: ResultRow[];
   hiddenCount: number;
-  counts: { ranked?: number; excluded?: number; provisional?: number; demo?: number };
+  counts: { ranked?: number; excluded?: number; unranked?: number; provisional?: number; demo?: number };
   districts?: string[];
 };
 
@@ -39,15 +38,43 @@ const STATUS_BADGE: Record<string, { tone: "green" | "amber" | "red" | "neutral"
   provisional: { tone: "amber", label: "Provisional" },
   low_coverage: { tone: "amber", label: "Low evidence" },
   unscored: { tone: "neutral", label: "Unscored" },
-  excluded: { tone: "red", label: "Excluded" },
+  excluded: { tone: "neutral", label: "You can’t go here — kept at the bottom" },
   not_considered: { tone: "neutral", label: "Not considered" },
   incomplete: { tone: "red", label: "Incomplete row" },
 };
 
+function RentBox({ projectId, row, onSaved }: { projectId: string; row: ResultRow; onSaved: () => void }) {
+  const [v, setV] = useState(row.userRentLkr == null ? "" : String(row.userRentLkr));
+  const [msg, setMsg] = useState<string | null>(null);
+  async function save() {
+    const n = v.trim() === "" ? null : Number(v.replace(/[^\d]/g, ""));
+    if (n != null && !Number.isFinite(n)) return setMsg("Enter the rent as a number, e.g. 35000.");
+    try {
+      await api(`/api/projects/${projectId}/options/${row.id}/rent`, { method: "POST", json: { rentLkr: n } });
+      setMsg("Saved.");
+      onSaved();
+    } catch (e) {
+      setMsg(errMsg(e));
+    }
+  }
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-navy-50 px-3 py-2 text-sm">
+      <a href={row.rentalSearchUrl!} target="_blank" rel="noreferrer noopener" className="font-semibold text-teal-800 underline">
+        Check rents nearby ↗
+      </a>
+      <span className="text-navy-700">Found a price? Rent per month (Rs.):</span>
+      <Input aria-label={`Monthly rent you found near ${row.institution}`} inputMode="numeric" className="w-32 py-1" value={v} onChange={(e) => setV(e.target.value.replace(/[^\d]/g, ""))} placeholder="e.g. 35000" />
+      <Button size="sm" variant="secondary" onClick={save}>Save</Button>
+      {row.userRentLkr != null && <Badge tone="teal">You entered Rs. {row.userRentLkr.toLocaleString("en-LK")}</Badge>}
+      {msg && <span className="text-xs text-navy-700">{msg}</span>}
+    </div>
+  );
+}
+
 export default function ResultsPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [view, setView] = useState<"ranked" | "excluded" | "all">("ranked");
+  const [view, setView] = useState<"ranked" | "unranked" | "all">("ranked");
   const [sort, setSort] = useState<string>("score");
   const [dir, setDir] = useState<"" | "asc" | "desc">("");
   const [q, setQ] = useState("");
@@ -73,6 +100,10 @@ export default function ResultsPage() {
   useEffect(() => {
     const t = setTimeout(load, 200);
     return () => clearTimeout(t);
+  }, [load]);
+  useEffect(() => {
+    window.addEventListener("np-proposal-applied", load);
+    return () => window.removeEventListener("np-proposal-applied", load);
   }, [load]);
 
   if (error) return <Alert tone="error">{error}</Alert>;
@@ -100,7 +131,7 @@ export default function ResultsPage() {
 
       <Card>
         <div className="flex flex-wrap items-end gap-3">
-          <Tabs label="Result view" value={view} onChange={setView} items={[{ value: "ranked", label: `Ranked${data.counts.ranked != null ? ` (${data.counts.ranked})` : ""}` }, { value: "excluded", label: `Excluded & incomplete${data.counts.excluded != null ? ` (${data.counts.excluded})` : ""}` }, { value: "all", label: "All" }]} />
+          <Tabs label="Result view" value={view} onChange={setView} items={[{ value: "ranked", label: `Ranked${data.counts.ranked != null ? ` (${data.counts.ranked})` : ""}` }, { value: "unranked", label: `Not ranked${data.counts.unranked != null ? ` (${data.counts.unranked})` : ""}` }, { value: "all", label: "All" }]} />
           <div className="flex items-end gap-2">
             <div>
               <label htmlFor="sort" className="block text-xs text-navy-700">Sort by</label>
@@ -137,35 +168,37 @@ export default function ResultsPage() {
           {data.rows.map((r, i) => {
             const st = STATUS_BADGE[r.status] ?? { tone: "neutral", label: r.status };
             return (
-              <li key={r.id} className="rounded-xl border border-navy-100 bg-white shadow-sm">
-                <div className="flex flex-wrap items-start gap-3 p-4">
-                  <input type="checkbox" className="mt-1.5" aria-label={`Select ${r.institution} for comparison`} checked={selected.includes(r.id)} onChange={() => toggle(r.id)} />
-                  <div className="w-10 text-center">
-                    <span className="block text-xs text-navy-700">{data.premium ? "Rank" : "#"}</span>
-                    <span className="tabular text-lg font-semibold text-navy-900">{data.premium ? r.systemRank ?? "—" : i + 1}</span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-navy-900">{r.institution}</p>
-                    <p className="text-sm text-navy-800">{r.designation}</p>
-                    <p className="text-xs text-navy-700">{r.district ?? "District unknown"} · INDEX {r.index ?? "—"} · {r.vacancies ? `${r.vacancies} vacancies` : "vacancies not stated"}</p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <Badge tone={st.tone}>{st.label}</Badge>
-                      <Badge>Evidence {r.coverage}%</Badge>
-                      {r.isDemoEvidence && <DemoBadge />}
-                      {r.preferenceRank && <Badge tone="teal">Your rank {r.preferenceRank}</Badge>}
+              <li key={r.id} className={cx("rounded-xl border bg-white shadow-sm", r.lockedToBottom ? "border-dashed border-navy-100 opacity-80" : "border-navy-100")}>
+                <div className="p-4">
+                  <div className="flex items-start gap-3">
+                    <input type="checkbox" className="mt-1.5 h-4 w-4 shrink-0 accent-teal-700" aria-label={`Select ${r.institution} for comparison`} checked={selected.includes(r.id)} onChange={() => toggle(r.id)} />
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-teal-50 text-sm font-bold text-teal-800" aria-label={data.premium ? `System rank ${r.systemRank ?? "none"}` : `Preview option ${i + 1}`}>
+                      {data.premium ? r.systemRank ?? "—" : i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold break-words text-navy-950">{r.institution}</p>
+                      <p className="text-sm text-navy-800">{r.designation}</p>
+                      <p className="text-xs text-navy-700">{r.district ?? "District unknown"} · INDEX {r.index ?? "—"} · {r.vacancies ? `${r.vacancies} vacancies` : "vacancies not stated"}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <ScoreValue score={r.score} status={r.status} />
                     </div>
                   </div>
-                  <dl className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs sm:w-80">
-                    <div><dt className="text-navy-700">Travel</dt><dd className="tabular font-medium">{fmtMin(r.travel.minutes)}</dd></div>
-                    <div><dt className="text-navy-700">Road</dt><dd className="tabular font-medium">{fmtKm(r.travel.roadKm)}</dd></div>
-                    <div><dt className="text-navy-700">Straight line</dt><dd className="tabular font-medium">{fmtKm(r.travel.straightKm)}</dd></div>
-                  </dl>
-                  <div className="w-28 text-right">
-                    <ScoreValue score={r.score} status={r.status} />
+                  <div className="mt-3 flex flex-wrap gap-1.5 sm:pl-[5.25rem]">
+                    <Badge tone={st.tone}>{st.label}</Badge>
+                    <Badge>Evidence {r.coverage}%</Badge>
+                    {r.isDemoEvidence && <DemoBadge />}
+                    {r.preferenceRank && <Badge tone="teal">Your rank {r.preferenceRank}</Badge>}
                   </div>
+                  <dl className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-navy-50 px-3 py-2 text-xs sm:ml-[5.25rem]">
+                    <div><dt className="text-navy-700">Travel</dt><dd className="tabular font-semibold">{fmtMin(r.travel.minutes)}</dd></div>
+                    <div><dt className="text-navy-700">Road</dt><dd className="tabular font-semibold">{fmtKm(r.travel.roadKm)}</dd></div>
+                    <div><dt className="text-navy-700">Straight line</dt><dd className="tabular font-semibold">{fmtKm(r.travel.straightKm)}</dd></div>
+                  </dl>
                 </div>
                 <div className="border-t border-navy-100 px-4 py-2">
                   <p className="text-sm text-navy-800">{r.explanation}</p>
+                  {r.rentalSearchUrl && <RentBox projectId={id} row={r} onSaved={load} />}
                   <button className="mt-1 text-sm font-medium text-teal-800 underline" aria-expanded={open === r.id} onClick={() => setOpen(open === r.id ? null : r.id)}>
                     {open === r.id ? "Hide details" : "Score breakdown & sources"}
                   </button>
@@ -187,10 +220,6 @@ export default function ResultsPage() {
         </ul>
       )}
 
-      <details className="rounded-xl border border-navy-100 bg-white p-4 shadow-sm">
-        <summary className="cursor-pointer font-medium text-navy-900">Ask the assistant about {data.premium ? "your options" : "your three preview options"}</summary>
-        <div className="mt-3 h-[26rem]"><Assistant projectId={id} onApplied={load} /></div>
-      </details>
 
       {!data.premium && data.hiddenCount > 0 && (
         <div className={cx("rounded-xl border-2 border-dashed border-amber-200 bg-amber-50 p-6 text-center")}>

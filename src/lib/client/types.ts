@@ -10,6 +10,9 @@ export type ResultRow = {
   vacancies: string | null;
   sourceRef: string;
   flags: string[];
+  userRentLkr: number | null;
+  rentalSearchUrl: string | null;
+  lockedToBottom: boolean;
   systemRank: number | null;
   preferenceRank: number | null;
   status: string;

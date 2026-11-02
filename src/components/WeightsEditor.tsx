@@ -3,20 +3,19 @@ import { Alert, Button, NumberInput, cx } from "./ui";
 import { CRITERIA, normalizeWeights, validateWeights, type CriterionKey, type Preferences } from "@/lib/preferences";
 
 export const CRIT_LABEL: Record<CriterionKey, { label: string; help: string }> = {
-  post: { label: "Post preference", help: "How well the post matches your ordered list of preferred posts." },
-  travel: { label: "Travel convenience", help: "Estimated travel time for your travel mode (road distance only if time is unknown)." },
-  climate: { label: "Climate match", help: "Annual mean temperature and rainfall versus your climate preference." },
-  facilities: { label: "Nearby facilities", help: "Schools, shops, pharmacies and banks within your chosen radius." },
-  location: { label: "Preferred institutions/districts", help: "100 for a preferred institution, 70 for a preferred district, 0 otherwise." },
+  post: { label: "Getting the post I want", help: "Your favourite post gets the most points." },
+  travel: { label: "Short journey", help: "Closer places get more points." },
+  climate: { label: "Weather I like", help: "Places with the weather you chose get more points." },
+  facilities: { label: "Schools and shops nearby", help: "Places with more of what you need nearby get more points." },
+  location: { label: "Places I like", help: "Hospitals and districts you said you like get extra points. Off unless you turn it on." },
 };
 
 export function WeightsEditor({ criteria, onChange }: { criteria: Preferences["criteria"]; onChange: (c: Preferences["criteria"]) => void }) {
-  const issues = validateWeights(criteria);
   const total = CRITERIA.filter((c) => criteria[c].enabled).reduce((s, c) => s + criteria[c].weight, 0);
   return (
     <div className="space-y-4">
       <p className="text-sm text-navy-700">
-        <strong>Weight</strong> = how important a criterion is to you. Each option then gets a <strong>criterion score</strong> (0–100) for how well it satisfies that criterion. Final score = Σ score × weight / 100.
+        Share 100% between the things below. A bigger percentage means it matters more to you.
       </p>
       {CRITERIA.map((c) => (
         <div key={c} className={cx("rounded-lg border p-3", criteria[c].enabled ? "border-navy-100 bg-white" : "border-dashed border-navy-100 bg-navy-50")}>
@@ -54,10 +53,9 @@ export function WeightsEditor({ criteria, onChange }: { criteria: Preferences["c
         </div>
       ))}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className={cx("text-sm font-medium tabular", Math.abs(total - 100) > 0.01 ? "text-red-700" : "text-teal-800")}>Enabled total: {Math.round(total * 100) / 100}%</p>
-        <Button type="button" variant="secondary" onClick={() => onChange(normalizeWeights(criteria))}>Normalize to 100%</Button>
+        <p className={cx("text-sm font-medium tabular", Math.abs(total - 100) > 0.01 ? "text-red-700" : "text-teal-800")}>Total: {Math.round(total * 100) / 100}%</p>
+        <Button type="button" variant="secondary" onClick={() => onChange(normalizeWeights(criteria))}>Make it 100%</Button>
       </div>
-      {issues.length > 0 && <Alert tone="warning">{issues.map((i) => <p key={i.code + i.message}>{i.message}</p>)}</Alert>}
     </div>
   );
 }

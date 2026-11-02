@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { api, errMsg } from "@/lib/client/api";
+import { Bot } from "lucide-react";
 import { Alert, Badge, Button, Textarea } from "./ui";
 
 type Proposal = { id: string; status?: string; preview: unknown };
@@ -93,17 +94,29 @@ export function Assistant({ projectId, onApplied }: { projectId: string; onAppli
       setBusy(false);
     }
   }
+  if (mode === "unavailable")
+    return (
+      <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-teal-100 bg-teal-50/60 p-6 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-teal-700 shadow-sm">
+          <Bot size={24} />
+        </span>
+        <h2 className="mt-3 text-base font-semibold text-navy-900">Your research assistant is coming soon</h2>
+        <p className="mt-2 text-sm text-navy-700">
+          Soon you&apos;ll be able to chat here while your list is analysed: ask why an option scored the way it did, ask it to look something up online, or ask for changes to your list. Every change will need your approval.
+        </p>
+      </div>
+    );
   return (
     <div className="flex h-full flex-col">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="font-semibold text-navy-900">Assistant</h2>
-        {mode === "live" ? <Badge tone="teal">AI (live)</Badge> : mode === "demo" ? <Badge tone="violet">Demo assistant — rule-based, not AI</Badge> : <Badge>Unavailable</Badge>}
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2 text-sm font-semibold text-navy-900"><Bot size={18} className="text-teal-700" /> Assistant</span>
+        {mode === "live" ? <Badge tone="teal">AI</Badge> : <Badge tone="violet">Demo — rule-based, not AI</Badge>}
       </div>
-      <p className="mb-2 text-xs text-navy-700">Explains scores from stored evidence and proposes changes. Nothing changes until you press Apply. It cannot see options you don&apos;t have access to and never guarantees a transfer.</p>
-      <div className="min-h-32 flex-1 space-y-3 overflow-y-auto rounded-lg border border-navy-100 bg-navy-50 p-3" aria-live="polite">
+      <p className="mb-2 text-xs text-navy-700">It explains scores and suggests changes. Nothing changes until you press Apply.</p>
+      <div className="min-h-32 flex-1 space-y-3 overflow-y-auto rounded-xl bg-navy-50 p-3" aria-live="polite">
         {msgs.length === 0 && <p className="text-xs text-navy-700">Try: “Move options within a three-hour drive closer to the top, while keeping my preferred posts first.”</p>}
         {msgs.map((m) => (
-          <div key={m.id} className={m.role === "user" ? "ml-8 rounded-lg bg-white p-2 text-sm" : "mr-8 text-sm"}>
+          <div key={m.id} className={m.role === "user" ? "ml-8 rounded-2xl rounded-br-sm bg-teal-700 px-3 py-2 text-sm text-white" : "mr-6 rounded-2xl rounded-bl-sm bg-white px-3 py-2 text-sm shadow-sm"}>
             <p className="whitespace-pre-wrap">{m.content}</p>
             {m.proposal && <ProposalCard projectId={projectId} p={m.proposal} onApplied={onApplied} />}
           </div>

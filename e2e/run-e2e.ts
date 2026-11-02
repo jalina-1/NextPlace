@@ -116,26 +116,14 @@ async function main() {
     await shot(page, "01-landing-desktop");
     await register(page, "Dr Test", "doctor@e2e.test");
 
-    step("Create a project and set preferences");
+    step("Create a project and upload the list first (step 1)");
     await page.getByLabel("Project name").fill("E2E transfers");
     await page.getByRole("button", { name: "Create project" }).click();
-    await page.waitForURL(/\/preferences$/);
-    const projectId = page.url().split("/projects/")[1].split("/")[0];
-    await page.getByLabel("Approximate home location").selectOption("Kandy");
-    await page.getByRole("button", { name: "2. Posts" }).click();
-    for (const p of ["Medical Officer - OPD", "Medical Officer - ETU"]) {
-      await page.getByLabel(/Preferred posts/).fill(p);
-      await page.getByRole("button", { name: "Add", exact: true }).click();
-    }
-    await page.getByRole("button", { name: "4. Climate & facilities" }).click();
-    await page.getByLabel("Temperature preference").selectOption("cooler");
-    await page.getByRole("button", { name: "6. Weights" }).click();
-    await shot(page, "02-weights");
-    await page.getByRole("button", { name: "Save and continue to import" }).click();
     await page.waitForURL(/\/import$/);
-    assert(true, "preferences saved");
-
-    step("Upload a CSV and confirm the column mapping");
+    const projectId = page.url().split("/projects/")[1].split("/")[0];
+    await page.getByRole("button", { name: "Save and continue" }).click();
+    await page.getByText("Upload your vacancy list before you continue.").waitFor();
+    assert(true, "can't continue without a list — a clear message is shown");
     await page.setInputFiles("#file", path.resolve("public/demo/demo-vacancies.csv"));
     await page.getByRole("button", { name: "Upload and read" }).click();
     await page.getByRole("button", { name: "Preview rows" }).click();
@@ -145,17 +133,55 @@ async function main() {
     await page.getByText("3. Review imported rows").waitFor();
     await page.getByRole("tab", { name: /Incomplete \(1\)/ }).waitFor();
     assert(true, "81 rows imported, 1 incomplete row flagged");
+    await page.getByRole("button", { name: "Save and continue" }).click();
+    await page.waitForURL(/\/home$/);
 
-    step("Run analysis (background jobs advance via request-triggered worker ticks)");
-    await page.getByRole("link", { name: "Continue to analysis" }).click();
-    await page.getByRole("button", { name: "Start analysis" }).click();
-    await page.getByRole("link", { name: "View results" }).waitFor({ timeout: 120_000 });
+    step("Home & travel: a missing answer is shown in red next to the question");
+    await page.getByRole("button", { name: "Save and continue" }).click();
+    await page.getByText("Choose the town you live in.").waitFor();
+    assert(await page.locator("[data-field='home'][data-field-error='true']").count() === 1, "the town question is highlighted");
+    assert(await page.locator("aside [aria-label='Needs attention']").count() >= 1, "the sidebar marks the step that needs attention");
+    await shot(page, "02-home-error");
+    await page.getByLabel("Choose your town").selectOption("Kandy");
+    await page.getByRole("radio", { name: /Up to 2 hours/ }).click();
+    await page.getByRole("button", { name: "Save and continue" }).click();
+    await page.waitForURL(/\/posts$/);
+
+    step("Posts: picked from the uploaded list, then ordered");
+    await page.getByRole("checkbox", { name: /Medical Officer - OPD/ }).check();
+    await page.getByRole("checkbox", { name: /Medical Officer - ETU/ }).check();
+    await page.getByText("100 points").waitFor();
+    await shot(page, "02b-posts");
+    await page.getByRole("button", { name: "Save and continue" }).click();
+    await page.waitForURL(/\/places$/);
+    await page.getByRole("button", { name: "Save and continue" }).click();
+    await page.waitForURL(/\/climate$/);
+    await page.getByRole("radio", { name: /Cool/ }).click();
+    await page.getByRole("radio", { name: /^Yes/ }).click();
+    await page.getByRole("button", { name: "Save and continue" }).click();
+    await page.getByText("Choose the most you can pay each month.").waitFor();
+    await page.getByRole("radio", { name: /Up to Rs. 50,000/ }).click();
+    await shot(page, "02c-climate");
+    await page.getByRole("button", { name: "Save and continue" }).click();
+    await page.waitForURL(/\/weights$/);
+    await shot(page, "02d-weights");
+    assert(true, "all setup questions answered");
+
+    step("Analysis starts automatically and shows live progress");
+    await page.getByRole("button", { name: "Save and start analysis" }).click();
+    await page.waitForURL(/\/analysis/);
+    await page.getByRole("link", { name: "See results" }).waitFor({ timeout: 120_000 });
     await shot(page, "04-analysis-done");
-    await page.getByRole("link", { name: "View results" }).click();
+    await page.getByRole("button", { name: "Minimize sidebar" }).click();
+    await page.getByRole("button", { name: "Expand sidebar" }).waitFor();
+    await shot(page, "04b-analysis-sidebar-minimized");
+    await page.getByRole("button", { name: "Expand sidebar" }).click();
+    await page.getByRole("link", { name: "See results" }).click();
 
     step("Free preview shows exactly three options and a premium placeholder");
     await page.getByText(/additional options — unlock full access/).waitFor();
     const freeCards = await page.locator("main ul.space-y-3 > li").count();
+    assert(await page.getByText("Check rents nearby").count() === 3, "each preview option has a rent search link");
     assert(freeCards === 3, `free preview shows 3 options (got ${freeCards})`);
     const apiFree = await page.evaluate(async (id) => (await fetch(`/api/projects/${id}/results?view=all&sort=institution&dir=desc`)).json(), projectId);
     assert(apiFree.rows.length === 3 && apiFree.hiddenCount === 78, "API never returns hidden rows to a free user");
@@ -223,10 +249,10 @@ async function main() {
     const afterMove = (await page.evaluate(async (id) => (await fetch(`/api/projects/${id}/final`)).json(), projectId)) as typeof before;
     assert(afterMove.items[1] === before.items[4] && afterMove.items[0] === before.items[0], "moved #5 to #1, then moved it down to #2");
     assert(afterMove.items.length + afterMove.excluded.length === 81 && new Set([...afterMove.items, ...afterMove.excluded]).size === 81, "no entries dropped or duplicated");
-    await page.locator("main").getByLabel("Ask the assistant").fill("Move options within a 3 hour drive closer to the top, while keeping my preferred posts first");
-    await page.locator("main").getByRole("button", { name: "Send" }).click();
+    await page.locator("aside[aria-label='Assistant']").getByLabel("Ask the assistant").fill("Move options within a 3 hour drive closer to the top, while keeping my preferred posts first");
+    await page.locator("aside[aria-label='Assistant']").getByRole("button", { name: "Send" }).click();
     await page.getByText("Proposed change — preview").waitFor();
-    await page.locator("main").getByRole("button", { name: "Apply" }).click();
+    await page.locator("aside[aria-label='Assistant']").getByRole("button", { name: "Apply" }).click();
     await page.getByText("applied").waitFor();
     await page.getByText("All changes saved").first().waitFor();
     await shot(page, "09-final-editor");

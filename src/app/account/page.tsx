@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession, authPost } from "@/lib/client/session";
 import { api, errMsg } from "@/lib/client/api";
 import { AccessBanner } from "@/components/AccessBanner";
@@ -13,6 +13,11 @@ export default function AccountPage() {
   const [next, setNext] = useState("");
   const [msg, setMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [confirmText, setConfirmText] = useState("");
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const loadProjects = () => api<{ projects: { id: string; name: string }[] }>("/api/projects").then((r) => setProjects(r.projects)).catch(() => {});
+  useEffect(() => {
+    loadProjects();
+  }, []);
   if (me?.session !== "active") return <div className="mx-auto max-w-3xl px-4 py-8"><Spinner /></div>;
   async function changePw(e: React.FormEvent) {
     e.preventDefault();
@@ -53,6 +58,31 @@ export default function AccountPage() {
         </form>
       </Card>
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
+      <Card title="Your projects">
+        {projects.length === 0 ? (
+          <p className="text-sm text-navy-700">No projects.</p>
+        ) : (
+          <ul className="divide-y divide-navy-100">
+            {projects.map((p) => (
+              <li key={p.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                <span>{p.name}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-red-700"
+                  onClick={async () => {
+                    if (!confirm(`Delete “${p.name}”, its uploaded file, analysis and final lists? This cannot be undone.`)) return;
+                    await api(`/api/projects/${p.id}`, { method: "DELETE" });
+                    loadProjects();
+                  }}
+                >
+                  Delete project
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
       <Card title="Data & deletion">
         <p className="text-sm text-navy-800">You can delete any project from its page. Deleting your account permanently removes all projects, uploaded lists, receipts, payment records and access periods. See <Link className="underline" href="/privacy">privacy & retention</Link>.</p>
         <div className="mt-4 flex flex-wrap items-end gap-2">

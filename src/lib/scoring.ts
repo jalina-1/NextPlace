@@ -105,7 +105,9 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 export function postScore(designation: string | null, prefs: Preferences): { score: number | null; matchedRank: number | null; detail: string } {
   if (!designation) return { score: null, matchedRank: null, detail: "Designation missing" };
   if (prefs.posts.length === 0) return { score: null, matchedRank: null, detail: "No preferred posts listed" };
-  const idx = prefs.posts.findIndex((p) => textMatches(designation, p));
+  // Posts picked from the file match exactly; typed text falls back to "contains".
+  const exact = prefs.posts.findIndex((p) => normalizeText(p) === normalizeText(designation));
+  const idx = exact >= 0 ? exact : prefs.posts.findIndex((p) => textMatches(designation, p));
   if (idx < 0)
     return { score: prefs.postScoring.unmatched, matchedRank: null, detail: `Matches none of your preferred posts (scored ${prefs.postScoring.unmatched})` };
   const s = Math.max(prefs.postScoring.floor, prefs.postScoring.firstChoice - prefs.postScoring.stepDown * idx);

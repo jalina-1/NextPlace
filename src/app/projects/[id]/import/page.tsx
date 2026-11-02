@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, errMsg } from "@/lib/client/api";
 import { useProject } from "@/lib/client/project";
-import { Alert, Badge, Button, ButtonLink, Card, Empty, Field, Input, Select, Spinner, Tabs, cx } from "@/components/ui";
+import { Alert, Badge, Button, Card, Empty, Field, Input, Select, Spinner, Tabs, cx } from "@/components/ui";
+import { StepPage } from "@/components/StepPage";
 
 type Cell = string | number | null;
 type TableInfo = { key: string; label: string; rowCount: number; headerRowIndex: number; headers: string[]; suggestion: { mapping: Record<string, number | null>; confidence: Record<string, number>; ambiguous: string[] }; warnings: string[]; previewRows: { ref: string; cells: Cell[]; confidence: number; flags: string[] }[] };
@@ -287,15 +288,32 @@ export default function ImportPage() {
   const { info, reload } = useProject();
   const [state, setState] = useState<ImportState | null>(null);
   const [remap, setRemap] = useState(false);
+  const [needUpload, setNeedUpload] = useState(false);
   const load = useCallback(() => api<ImportState>(`/api/projects/${id}/import`).then(setState), [id]);
   useEffect(() => {
     load();
   }, [load]);
   if (!state) return <Spinner />;
   const locked = !!info?.project.previewFrozenAt && !info?.premium;
+  const confirmed = !!state.mapping;
   return (
+    <StepPage
+      projectId={id}
+      step="import"
+      title="Upload your vacancy list"
+      intro="Start with the list you received (Excel, CSV or PDF). We use it to find the posts and hospitals for the next questions."
+      problem={needUpload ? { step: "import", message: state.source ? "Confirm the columns (step 2 below) before you continue." : "Upload your vacancy list before you continue." } : null}
+      onNext={() => {
+        if (!confirmed) {
+          setNeedUpload(true);
+          requestAnimationFrame(() => document.querySelector("[data-upload]")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+          return false;
+        }
+        return true;
+      }}
+    >
     <div className="space-y-6">
-      <Card title="1. Upload your list" actions={state.source && <a className="text-sm text-teal-800 underline" href={`/api/projects/${id}/source`}>Download original file</a>}>
+      <Card className={needUpload && !state.source ? "border-red-300 ring-4 ring-red-50" : undefined} title="1. Upload your list" actions={state.source && <a className="text-sm text-teal-800 underline" href={`/api/projects/${id}/source`}>Download original file</a>}>
         {state.source && (
           <p className="mb-4 text-sm text-navy-800">
             Current file: <strong>{state.source.name}</strong> ({state.source.kind.toUpperCase()}, {Math.round(state.source.sizeBytes / 1024)} KB)
@@ -312,12 +330,12 @@ export default function ImportPage() {
         {locked ? (
           <Alert tone="info">Your free preview for this project is fixed, so the list can&apos;t be replaced here. Create a new project or unlock full access to upload a different list.</Alert>
         ) : (
-          <Upload id={id} hasSource={!!state.source} onDone={() => { load(); reload(); setRemap(true); }} />
+          <div data-upload><Upload id={id} hasSource={!!state.source} onDone={() => { load(); reload(); setRemap(true); setNeedUpload(false); }} /></div>
         )}
       </Card>
       {state.source?.status === "parsed" && state.tables.length > 0 && (!state.mapping || remap) && !locked && (
-        <Card title="2. Confirm columns">
-          <Mapping id={id} state={state} onConfirmed={() => { setRemap(false); load(); reload(); }} />
+        <Card className={needUpload ? "border-red-300 ring-4 ring-red-50" : undefined} title="2. Confirm the columns">
+          <div data-upload><Mapping id={id} state={state} onConfirmed={() => { setRemap(false); setNeedUpload(false); load(); reload(); }} /></div>
         </Card>
       )}
       {state.mapping && (
@@ -326,18 +344,14 @@ export default function ImportPage() {
           actions={
             <div className="flex gap-2">
               {!remap && !locked && <Button size="sm" variant="ghost" onClick={() => setRemap(true)}>Change mapping</Button>}
-              <ButtonLink href={`/projects/${id}/analysis`}>Continue to analysis</ButtonLink>
+
             </div>
           }
         >
           <Review id={id} />
         </Card>
       )}
-      {!state.source && (
-        <p className="text-sm text-navy-700">
-          Tip: set your <Link className="underline" href={`/projects/${id}/preferences`}>preferences</Link> first so analysis can start right after import.
-        </p>
-      )}
     </div>
+    </StepPage>
   );
 }
