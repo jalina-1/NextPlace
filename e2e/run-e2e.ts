@@ -126,7 +126,6 @@ async function main() {
     assert(true, "can't continue without a list — a clear message is shown");
     await page.setInputFiles("#file", path.resolve("public/demo/demo-vacancies.csv"));
     await page.getByRole("button", { name: "Upload and read" }).click();
-    await page.getByRole("button", { name: "Preview rows" }).click();
     await page.getByText(/81 rows/).waitFor();
     await shot(page, "03-mapping-preview");
     await page.getByRole("button", { name: "Confirm mapping and import rows" }).click();

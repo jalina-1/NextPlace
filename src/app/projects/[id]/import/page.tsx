@@ -80,6 +80,11 @@ function Mapping({ id, state, onConfirmed }: { id: string; state: ImportState; o
   const headers = (table.previewRows[headerRow]?.cells ?? []).map((c, i) => (c == null || c === "" ? `Column ${i + 1}` : String(c)));
   useEffect(() => {
     setPreview(null);
+    const t = setTimeout(() => {
+      doPreview();
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableKey, headerRow, mapping]);
   async function doPreview() {
     setBusy(true);
@@ -140,7 +145,6 @@ function Mapping({ id, state, onConfirmed }: { id: string; state: ImportState; o
       </div>
       {error && <Alert tone="error">{error}</Alert>}
       <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" onClick={doPreview} disabled={busy}>Preview rows</Button>
         <Button onClick={confirmIt} disabled={busy || !preview || preview.issues.some((i) => /required|outside|same column/.test(i))}>Confirm mapping and import rows</Button>
       </div>
       {preview && (
@@ -335,7 +339,7 @@ export default function ImportPage() {
       </Card>
       {state.source?.status === "parsed" && state.tables.length > 0 && (!state.mapping || remap) && !locked && (
         <Card className={needUpload ? "border-red-300 ring-4 ring-red-50" : undefined} title="2. Confirm the columns">
-          <div data-upload><Mapping id={id} state={state} onConfirmed={() => { setRemap(false); setNeedUpload(false); load(); reload(); }} /></div>
+          <div data-upload><Mapping key={state.source?.id} id={id} state={state} onConfirmed={() => { setRemap(false); setNeedUpload(false); load(); reload(); }} /></div>
         </Card>
       )}
       {state.mapping && (
