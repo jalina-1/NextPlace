@@ -8,7 +8,7 @@
  * - Uploaded data and evidence are passed as quoted data, never as instructions.
  * - Without an API key a rule-based demo assistant is used and labeled as such.
  */
-import { runBot, type BotContext } from "../agent/bot";
+import { runBot, botProviderReady, type BotContext } from "../agent/bot";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "../db";
@@ -38,9 +38,7 @@ type Ctx = Awaited<ReturnType<typeof buildContext>>;
 
 export function assistantMode(): "live" | "demo" | "unavailable" {
   const p = env.providers.ai;
-  if (p === "anthropic" && env.anthropicKey) return "live";
-  if (p === "openai" && env.openaiKey) return "live";
-  if (p === "gemini" && env.geminiKey) return "live";
+  if (p !== "off" && p !== "demo" && ["gemini", "openrouter", "openai", "anthropic"].some(botProviderReady)) return "live";
   if (p === "off") return "unavailable";
   return "demo";
 }

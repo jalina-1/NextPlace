@@ -65,7 +65,7 @@ export const env = {
         | "overpass"
         | "demo",
       // The research bot is not connected by default; the chat panel shows "coming soon".
-      ai: (pick("AI_PROVIDER") ?? (pick("OPENAI_API_KEY") ? "openai" : pick("GEMINI_API_KEY") ? "gemini" : pick("ANTHROPIC_API_KEY") ? "anthropic" : "off")) as "openai" | "gemini" | "anthropic" | "demo" | "off",
+      ai: (pick("AI_PROVIDER") ?? (pick("OPENROUTER_API_KEY") ? "openrouter" : pick("OPENAI_API_KEY") ? "openai" : pick("GEMINI_API_KEY") ? "gemini" : pick("ANTHROPIC_API_KEY") ? "anthropic" : "off")) as "openrouter" | "openai" | "gemini" | "anthropic" | "demo" | "off",
       ocr: (pick("OCR_PROVIDER") ?? (pick("GOOGLE_VISION_API_KEY") ? "google-vision" : pick("OCR_SPACE_API_KEY") ? "ocr-space" : "off")) as
         | "google-vision"
         | "ocr-space"
@@ -84,6 +84,13 @@ export const env = {
   },
   get openaiModel() {
     return pick("OPENAI_MODEL") ?? "gpt-5-mini";
+  },
+  get openrouterKey() {
+    return pick("OPENROUTER_API_KEY");
+  },
+  /** Comma-separated; OpenRouter tries them in order. */
+  get openrouterModels() {
+    return (pick("OPENROUTER_MODELS") ?? "openrouter/auto").split(",").map((m) => m.trim()).filter(Boolean);
   },
   get geminiKey() {
     return pick("GEMINI_API_KEY");
@@ -126,7 +133,7 @@ export function providerStatus() {
     { capability: "Geocoding & routes", provider: p.maps, configured: p.maps !== "demo", demo: p.maps === "demo" },
     { capability: "Nearby facilities", provider: p.facilities, configured: p.facilities !== "demo", demo: p.facilities === "demo" },
     { capability: "Climate", provider: p.climate, configured: p.climate !== "demo", demo: p.climate === "demo" },
-    { capability: "AI assistant", provider: p.ai, configured: (p.ai === "anthropic" && !!env.anthropicKey) || (p.ai === "openai" && !!env.openaiKey) || (p.ai === "gemini" && !!env.geminiKey), demo: p.ai === "demo" },
+    { capability: "AI assistant", provider: p.ai, configured: (p.ai === "anthropic" && !!env.anthropicKey) || (p.ai === "openai" && !!env.openaiKey) || (p.ai === "gemini" && !!env.geminiKey) || (p.ai === "openrouter" && !!env.openrouterKey), demo: p.ai === "demo" },
     { capability: "OCR for scanned PDFs", provider: p.ocr, configured: p.ocr !== "off" },
     { capability: "Email (password reset)", provider: p.email, configured: p.email === "resend" && !!env.resendKey },
     { capability: "Scheduled worker secret", provider: "CRON_SECRET", configured: !!env.cronSecret },

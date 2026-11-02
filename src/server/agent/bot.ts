@@ -219,7 +219,7 @@ export async function runBot(
     return { reply: r, action, findings };
   };
 
-  if (env.providers.ai === "gemini") {
+  const runGemini = async () => {
     // Gemini: our tools as function declarations. Web search is a function of its own that
     // runs a separate Google Search–grounded request and returns the text with source links.
     const genai = new GoogleGenAI({ apiKey: env.geminiKey });
@@ -283,9 +283,9 @@ export async function runBot(
       contents.push({ role: "user", parts });
     }
     return done("", "gemini-max-iterations");
-  }
+  };
 
-  if (env.providers.ai === "openai" || (deps.openai && !deps.client)) {
+  const runOpenAI = async () => {
     // OpenAI Responses API: run our function tools in a loop; web search runs on OpenAI's side.
     const client = deps.openai ?? (new OpenAI({ apiKey: env.openaiKey }) as unknown as NonNullable<BotDeps["openai"]>);
     type Item = Record<string, unknown>;
@@ -321,8 +321,9 @@ export async function runBot(
       }
     }
     return done("", "openai-max-iterations");
-  }
+  };
 
+  const runAnthropic = async () => {
   const tools = specs.map((t) => betaTool(t as never));
   const client = deps.client ?? new Anthropic({ apiKey: env.anthropicKey });
   const messages: Anthropic.Beta.BetaMessageParam[] = [...history10.map((h) => ({ role: h.role, content: h.content })), { role: "user", content: message }];
@@ -344,4 +345,70 @@ export async function runBot(
 
   if (final.stop_reason === "refusal") return { reply: "Sorry, I can't help with that request.", action: null, findings };
   return done(textOf(final), String(final.stop_reason));
+  };
+
+  const runOpenRouter = async () => {
+    // OpenRouter: one key, many models. OPENROUTER_MODELS is a comma list tried in order by
+    // OpenRouter itself; the "web" plugin adds internet search results with source links.
+    const client = new OpenAI({ apiKey: env.openrouterKey, baseURL: "https://openrouter.ai/api/v1" });
+    const [first, ...rest] = env.openrouterModels;
+    type Msg = Record<string, unknown>;
+    const msgs: Msg[] = [{ role: "system", content: SYSTEM }, ...history10.map((h) => ({ role: h.role, content: h.content })), { role: "user", content: message }];
+    const tools = specs.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
+    for (let i = 0; i < 12; i++) {
+      const res = (await client.chat.completions.create({
+        model: first,
+        ...(rest.length ? { models: rest } : {}),
+        ...(i === 0 ? { plugins: [{ id: "web", max_results: 3 }] } : {}),
+        messages: msgs,
+        tools,
+      } as never)) as unknown as { choices: { message: Msg & { content?: string | null; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[] };
+      const m = res.choices?.[0]?.message;
+      if (!m) throw new Error("OpenRouter returned no answer");
+      const calls = m.tool_calls ?? [];
+      if (!calls.length) return done((m.content ?? "").trim(), "openrouter");
+      msgs.push(m);
+      for (const c of calls) {
+        const spec = specs.find((t) => t.name === c.function.name);
+        let out: string;
+        try {
+          out = spec ? await spec.run(JSON.parse(c.function.arguments || "{}")) : "Unknown tool.";
+        } catch (e) {
+          out = `Error: ${e instanceof Error ? e.message : "tool failed"}`;
+        }
+        msgs.push({ role: "tool", tool_call_id: c.id, content: out });
+      }
+    }
+    return done("", "openrouter-max-iterations");
+  };
+
+  // Tests inject a client for one provider.
+  if (deps.client) return runAnthropic();
+  if (deps.openai) return runOpenAI();
+
+  // Try the chosen provider first; if it fails (busy, no credit, model gone), fall back to
+  // every other provider that has a key.
+  const runners = { gemini: runGemini, openrouter: runOpenRouter, openai: runOpenAI, anthropic: runAnthropic } as const;
+  const order = [...new Set([env.providers.ai, "gemini", "openrouter", "openai", "anthropic"])].filter(
+    (p): p is keyof typeof runners => p in runners && botProviderReady(p),
+  );
+  let lastError: unknown = new Error("No AI provider is configured");
+  for (const p of order) {
+    try {
+      return await runners[p]();
+    } catch (e) {
+      lastError = e;
+      logger.warn("bot.provider_failed", { projectId, provider: p, error: e instanceof Error ? e.message.slice(0, 300) : String(e) });
+      action = null;
+    }
+  }
+  throw lastError;
+}
+
+export function botProviderReady(p: string): boolean {
+  if (p === "gemini") return !!env.geminiKey;
+  if (p === "openrouter") return !!env.openrouterKey;
+  if (p === "openai") return !!env.openaiKey;
+  if (p === "anthropic") return !!env.anthropicKey;
+  return false;
 }
