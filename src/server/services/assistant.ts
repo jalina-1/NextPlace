@@ -39,6 +39,7 @@ type Ctx = Awaited<ReturnType<typeof buildContext>>;
 export function assistantMode(): "live" | "demo" | "unavailable" {
   const p = env.providers.ai;
   if (p === "anthropic" && env.anthropicKey) return "live";
+  if (p === "openai" && env.openaiKey) return "live";
   if (p === "off") return "unavailable";
   return "demo";
 }

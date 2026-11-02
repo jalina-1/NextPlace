@@ -1,5 +1,5 @@
 /**
- * NextPlace research assistant (Claude, server-side only).
+ * NextPlace research assistant (Claude or OpenAI, server-side only).
  *
  * The bot can read the user's answers and accessible options, search the web, save
  * findings (each with a source link) and propose changes. It never changes the list or
@@ -9,6 +9,7 @@
  * Content from the uploaded list, stored evidence and web pages is untrusted data.
  */
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { betaTool } from "@anthropic-ai/sdk/helpers/beta/json-schema";
 import { db, schema } from "../db";
 import { env } from "../env-core";
@@ -47,7 +48,11 @@ export type BotDeps = {
   preview: (action: BotAction) => unknown;
   /** For tests: a client with the same `beta.messages.toolRunner` surface. */
   client?: Pick<Anthropic, "beta">;
+  /** For tests: a client with the same `responses.create` surface. */
+  openai?: { responses: { create: (body: never) => Promise<unknown> } };
 };
+
+type ToolSpec = { name: string; description: string; inputSchema: Record<string, unknown>; run: (input: unknown) => Promise<string> };
 
 const SYSTEM = `You are the NextPlace assistant. You help a doctor in Sri Lanka organise and rank the transfer vacancies in their own list.
 
@@ -84,8 +89,8 @@ export async function runBot(
 
   const resolve = (ref: string) => ctx.refs.get(ref.trim().startsWith("#") ? ref.trim() : `#${ref.trim()}`) ?? null;
 
-  const tools = [
-    betaTool({
+  const specs: ToolSpec[] = [
+    ({
       name: "get_preferences",
       description: "Read the user's answers: home town, travel, chosen posts in order, places they like and can't go to, weather, facilities, rental need and what matters most.",
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
@@ -106,7 +111,7 @@ export async function runBot(
         });
       },
     }),
-    betaTool({
+    ({
       name: "list_options",
       description: "List the options the user can see, best match first, with score, travel time, weather and nearby facilities.",
       inputSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 120 } }, additionalProperties: false },
@@ -120,7 +125,7 @@ export async function runBot(
         });
       },
     }),
-    betaTool({
+    ({
       name: "get_option",
       description: "Get one option by ref (e.g. #3), including findings saved earlier.",
       inputSchema: { type: "object", properties: { ref: { type: "string" } }, required: ["ref"], additionalProperties: false },
@@ -136,7 +141,7 @@ export async function runBot(
         return JSON.stringify({ ...ctx.describe(id), findings: saved });
       },
     }),
-    betaTool({
+    ({
       name: "save_finding",
       description: "Save a fact you found online about one option (or the whole list if ref is omitted). source_url is required and must be the page the fact came from.",
       inputSchema: {
@@ -167,7 +172,7 @@ export async function runBot(
         return "Saved.";
       },
     }),
-    betaTool({
+    ({
       name: "propose_change",
       description:
         "Propose ONE change for the user to review. kind: prioritize (move options within max_travel_minutes up; keep_preferred_posts_first keeps chosen posts ahead), move (option_refs[0] to to_position), exclude / include (option_refs), set_weights (weights in %, they are rebalanced to 100). Only the last valid proposal is shown.",
@@ -206,8 +211,54 @@ export async function runBot(
     }),
   ];
 
+  const history10 = history.slice(-10);
+  const done = (reply: string, stop: string) => {
+    const r = reply || (action ? "I've prepared a change for you to review." : "I couldn't find an answer to that.");
+    logger.info("bot.reply", { projectId, findings, proposed: !!action, stop });
+    return { reply: r, action, findings };
+  };
+
+  if (env.providers.ai === "openai" || (deps.openai && !deps.client)) {
+    // OpenAI Responses API: run our function tools in a loop; web search runs on OpenAI's side.
+    const client = deps.openai ?? (new OpenAI({ apiKey: env.openaiKey }) as unknown as NonNullable<BotDeps["openai"]>);
+    type Item = Record<string, unknown>;
+    const input: Item[] = [...history10.map((h) => ({ role: h.role, content: h.content })), { role: "user", content: message }];
+    const tools = [
+      ...specs.map((t) => ({ type: "function", name: t.name, description: t.description, parameters: t.inputSchema, strict: false })),
+      { type: "web_search" },
+    ];
+    for (let i = 0; i < 12; i++) {
+      const res = (await client.responses.create({ model: env.openaiModel, instructions: SYSTEM, input, tools } as never)) as { output: Item[]; output_text?: string };
+      const calls = res.output.filter((o) => o.type === "function_call") as { name: string; arguments: string; call_id: string }[];
+      if (!calls.length) {
+        const text =
+          res.output_text ??
+          res.output
+            .filter((o) => o.type === "message")
+            .flatMap((o) => (o.content as { type: string; text?: string }[]) ?? [])
+            .filter((c) => c.type === "output_text")
+            .map((c) => c.text)
+            .join("\n");
+        return done((text ?? "").trim(), "openai");
+      }
+      input.push(...res.output);
+      for (const c of calls) {
+        const spec = specs.find((t) => t.name === c.name);
+        let out: string;
+        try {
+          out = spec ? await spec.run(JSON.parse(c.arguments || "{}")) : "Unknown tool.";
+        } catch (e) {
+          out = `Error: ${e instanceof Error ? e.message : "tool failed"}`;
+        }
+        input.push({ type: "function_call_output", call_id: c.call_id, output: out });
+      }
+    }
+    return done("", "openai-max-iterations");
+  }
+
+  const tools = specs.map((t) => betaTool(t as never));
   const client = deps.client ?? new Anthropic({ apiKey: env.anthropicKey });
-  const messages: Anthropic.Beta.BetaMessageParam[] = [...history.slice(-10).map((h) => ({ role: h.role, content: h.content })), { role: "user", content: message }];
+  const messages: Anthropic.Beta.BetaMessageParam[] = [...history10.map((h) => ({ role: h.role, content: h.content })), { role: "user", content: message }];
 
   const model = env.anthropicModel;
   // Server-side refusal fallbacks and the newer web search tool exist only on some models
@@ -225,7 +276,5 @@ export async function runBot(
   });
 
   if (final.stop_reason === "refusal") return { reply: "Sorry, I can't help with that request.", action: null, findings };
-  const reply = textOf(final) || (action ? "I've prepared a change for you to review." : "I couldn't find an answer to that.");
-  logger.info("bot.reply", { projectId, findings, proposed: !!action, stop: final.stop_reason });
-  return { reply, action, findings };
+  return done(textOf(final), String(final.stop_reason));
 }
