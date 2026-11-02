@@ -130,7 +130,7 @@ async function main() {
     await shot(page, "03-mapping-preview");
     await page.getByRole("button", { name: "Confirm mapping and import rows" }).click();
     await page.getByText("3. Review imported rows").waitFor();
-    await page.getByRole("tab", { name: /Incomplete \(1\)/ }).waitFor();
+    await page.getByRole("tab", { name: /Needs checking \(1\)/ }).waitFor();
     assert(true, "81 rows imported, 1 incomplete row flagged");
     await page.getByRole("button", { name: "Save and continue" }).click();
     await page.waitForURL(/\/home$/);
@@ -149,7 +149,8 @@ async function main() {
     step("Posts: picked from the uploaded list, then ordered");
     await page.getByRole("checkbox", { name: /Medical Officer - OPD/ }).check();
     await page.getByRole("checkbox", { name: /Medical Officer - ETU/ }).check();
-    await page.getByText("100 points").waitFor();
+    await page.getByRole("button", { name: /Move Medical Officer - ETU up/ }).waitFor();
+    assert(await page.getByText(/points/).count() === 0, "posts page shows no points");
     await shot(page, "02b-posts");
     await page.getByRole("button", { name: "Save and continue" }).click();
     await page.waitForURL(/\/places$/);
@@ -157,9 +158,6 @@ async function main() {
     await page.waitForURL(/\/climate$/);
     await page.getByRole("radio", { name: /Cool/ }).click();
     await page.getByRole("radio", { name: /^Yes/ }).click();
-    await page.getByRole("button", { name: "Save and continue" }).click();
-    await page.getByText("Choose the most you can pay each month.").waitFor();
-    await page.getByRole("radio", { name: /Up to Rs. 50,000/ }).click();
     await shot(page, "02c-climate");
     await page.getByRole("button", { name: "Save and continue" }).click();
     await page.waitForURL(/\/weights$/);
@@ -180,7 +178,8 @@ async function main() {
     step("Free preview shows exactly three options and a premium placeholder");
     await page.getByText(/additional options — unlock full access/).waitFor();
     const freeCards = await page.locator("main ul.space-y-3 > li").count();
-    assert(await page.getByText("Check rents nearby").count() === 3, "each preview option has a rent search link");
+    assert(await page.getByText("Check rents nearby").count() === 0, "no rent box in results");
+    assert(await page.getByText("Complete evidence").count() === 0, "no technical evidence labels");
     assert(freeCards === 3, `free preview shows 3 options (got ${freeCards})`);
     const apiFree = await page.evaluate(async (id) => (await fetch(`/api/projects/${id}/results?view=all&sort=institution&dir=desc`)).json(), projectId);
     assert(apiFree.rows.length === 3 && apiFree.hiddenCount === 78, "API never returns hidden rows to a free user");

@@ -191,7 +191,6 @@ function EditRow({ id, row, onDone }: { id: string; row: Row; onDone: () => void
   }
   return (
     <div className="space-y-3 rounded-lg bg-navy-50 p-3">
-      <p className="text-xs text-navy-700">Original cells: {row.original.map((c) => (c == null ? "—" : String(c))).join(" | ")}</p>
       <div className="grid gap-2 sm:grid-cols-5">
         {FIELDS.map((f) => (
           <Field key={f.key} label={f.label} htmlFor={`e-${row.id}-${f.key}`}>
@@ -201,7 +200,7 @@ function EditRow({ id, row, onDone }: { id: string; row: Row; onDone: () => void
       </div>
       {error && <Alert tone="error">{error}</Alert>}
       <div className="flex gap-2">
-        <Button size="sm" onClick={save}>Save correction</Button>
+        <Button size="sm" onClick={save}>Save</Button>
         <Button size="sm" variant="ghost" onClick={onDone}>Cancel</Button>
       </div>
     </div>
@@ -234,15 +233,11 @@ function Review({ id }: { id: string }) {
           onChange={(v) => { setFilter(v); setOffset(0); }}
           items={[
             { value: "all", label: `All (${data.total})` },
-            { value: "flagged", label: `Needs review (${data.counts.flagged})` },
-            { value: "incomplete", label: `Incomplete (${data.counts.incomplete})` },
-            { value: "duplicates", label: `Duplicates (${data.counts.duplicates})` },
-            { value: "not_considered", label: `Not considered (${data.counts.notConsidered})` },
+            ...(data.counts.flagged > 0 ? [{ value: "flagged" as const, label: `Needs checking (${data.counts.flagged})` }] : []),
           ]}
         />
         <Input aria-label="Search rows" placeholder="Search institution, district, post" value={q} onChange={(e) => { setQ(e.target.value); setOffset(0); }} className="max-w-xs" />
       </div>
-      <p className="text-xs text-navy-700">Mark options you do not want to consider. NextPlace never decides eligibility from a job title. Possible duplicates are only flagged — decide for yourself whether to keep both.</p>
       {data.rows.length === 0 ? (
         <Empty title="No rows match this view" />
       ) : (
@@ -263,12 +258,10 @@ function Review({ id }: { id: string }) {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => setEditing(editing === r.id ? null : r.id)}>Correct</Button>
-                  {r.decision === "consider" ? (
-                    <Button size="sm" variant="secondary" onClick={() => decide([r.id], "not_considered")}>Don&apos;t consider</Button>
-                  ) : (
-                    <Button size="sm" variant="secondary" onClick={() => decide([r.id], "consider")}>Consider</Button>
+                  {r.decision === "not_considered" && (
+                    <Button size="sm" variant="ghost" onClick={() => decide([r.id], "consider")}>Include again</Button>
                   )}
+                  <Button size="sm" variant="secondary" onClick={() => setEditing(editing === r.id ? null : r.id)}>{editing === r.id ? "Close" : "Edit"}</Button>
                 </div>
               </div>
               {editing === r.id && <div className="mt-3"><EditRow id={id} row={r} onDone={() => { setEditing(null); load(); }} /></div>}

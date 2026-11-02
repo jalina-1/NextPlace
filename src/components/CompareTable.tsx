@@ -25,7 +25,6 @@ const ATTRS: Attr[] = [
   { label: "Annual rainfall", get: (r) => r.climate?.annualRainMm ?? null, fmt: (v) => (v == null ? "Unknown" : `${v} mm`) },
   { label: "Schools nearby", get: (r) => r.facilities?.counts.schools ?? null, better: "high" },
   { label: "Shops nearby", get: (r) => r.facilities?.counts.shops ?? null, better: "high" },
-  { label: "Rent you found (per month)", get: (r) => r.userRentLkr ?? null, fmt: (v) => (v == null ? "Unknown" : `Rs. ${Number(v).toLocaleString("en-LK")}`), better: "low" },
 ];
 
 export function CompareTable({ rows, compact }: { rows: ResultRow[]; compact?: boolean }) {

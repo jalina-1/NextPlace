@@ -17,7 +17,6 @@ const LEVELS = [
   { value: 1, label: "Nice to have" },
   { value: 3, label: "Important" },
 ];
-const BUDGETS = [20000, 30000, 50000, 75000, 100000];
 
 export default function ClimateStep() {
   const { id } = useParams<{ id: string }>();
@@ -80,39 +79,17 @@ export default function ClimateStep() {
         </ul>
       </Question>
 
-      <Question field="rental" title="Are you looking for a house to rent?">
+      <Question field="rental" title="Do you need a house to rent?">
         <Choices
           label="Looking for a house to rent"
           columns={2}
           value={rental.looking ? "yes" : "no"}
           onChange={(v) => setRental({ looking: v === "yes" })}
           options={[
-            { value: "yes", label: "Yes", hint: "Show me where to check rents", icon: <Home size={22} /> },
-            { value: "no", label: "No", hint: "I have a place or will use quarters", icon: <House size={22} /> },
+            { value: "yes", label: "Yes", icon: <Home size={22} /> },
+            { value: "no", label: "No", icon: <House size={22} /> },
           ]}
         />
-        {rental.looking && (
-          <div className="mt-5 space-y-5">
-            <div data-field="rental.maxMonthlyLkr" data-field-error={errors["rental.maxMonthlyLkr"] ? "true" : undefined} className={errors["rental.maxMonthlyLkr"] ? "field-error" : undefined}>
-              <p className="mb-2 font-semibold text-navy-950">What is the most you can pay each month?</p>
-              <Choices
-                label="Monthly rent budget"
-                columns={3}
-                value={rental.maxMonthlyLkr}
-                onChange={(v) => setRental({ maxMonthlyLkr: v })}
-                options={BUDGETS.map((b) => ({ value: b, label: `Up to Rs. ${b.toLocaleString("en-LK")}` }))}
-              />
-              {errors["rental.maxMonthlyLkr"] && <p className="mt-2 text-sm font-medium text-red-700" role="alert">⚠ {errors["rental.maxMonthlyLkr"]}</p>}
-            </div>
-            <div>
-              <p className="mb-2 font-semibold text-navy-950">How many bedrooms do you need?</p>
-              <Choices label="Bedrooms" columns={3} value={rental.bedrooms} onChange={(v) => setRental({ bedrooms: v })} options={[{ value: 1, label: "1" }, { value: 2, label: "2" }, { value: 3, label: "3 or more" }]} />
-            </div>
-            <p className="rounded-lg bg-navy-50 px-3 py-2 text-sm text-navy-700">
-              We can&apos;t see rent prices ourselves. In your results, each hospital gets a “Check rents nearby” link, and you can type in the rent you find so you can compare.
-            </p>
-          </div>
-        )}
       </Question>
     </StepPage>
   );

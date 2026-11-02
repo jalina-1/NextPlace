@@ -24,7 +24,6 @@ export function validateStep(step: StepKey, p: Preferences): FieldErrors {
     for (const i of validateThresholds(p)) if (i.field?.startsWith("travel")) e[i.field] = i.message;
   }
   if (step === "posts" && p.criteria.post.enabled && p.posts.length === 0) e.posts = "Choose at least one post you would like.";
-  if (step === "climate" && p.rental.looking && p.rental.maxMonthlyLkr == null) e["rental.maxMonthlyLkr"] = "Choose the most you can pay each month.";
   if (step === "weights") for (const i of validateWeights(p.criteria)) e[i.field ?? "criteria"] = i.message;
   return e;
 }

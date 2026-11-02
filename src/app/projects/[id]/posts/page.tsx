@@ -11,11 +11,6 @@ import { normalizeText } from "@/lib/scoring";
 
 type Designation = { name: string; rows: number; vacancies: number };
 
-/** Points shown to the user for each chosen post (same rule the scoring uses). */
-function pointsFor(i: number, ps: { firstChoice: number; stepDown: number; floor: number }) {
-  return Math.max(ps.floor, ps.firstChoice - ps.stepDown * i);
-}
-
 export default function PostsStep() {
   const { id } = useParams<{ id: string }>();
   const { prefs, update, errors, save, saving, otherStepProblem, loadError } = usePrefs(id, "posts");
@@ -80,13 +75,12 @@ export default function PostsStep() {
           </Question>
 
           {chosen.length > 0 && (
-            <Question field="postOrder" title="2. Put them in order" hint="Your first choice gets the most points. Use the arrows to move a post up or down.">
+            <Question field="postOrder" title="2. Put them in order" hint="Your favourite first.">
               <ol className="space-y-2">
                 {chosen.map((p, i) => (
                   <li key={p} className="flex items-center gap-3 rounded-xl border border-navy-100 bg-white px-3 py-2.5">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-700 text-sm font-bold text-white">{i + 1}</span>
                     <span className="min-w-0 flex-1 font-medium">{p}</span>
-                    <span className="tabular hidden text-sm font-semibold text-teal-800 sm:inline">{pointsFor(i, prefs.postScoring)} points</span>
                     <button type="button" className="rounded-lg p-2 hover:bg-navy-50 disabled:opacity-30" aria-label={`Move ${p} up`} disabled={i === 0} onClick={() => move(i, -1)}>
                       <ArrowUp size={16} />
                     </button>
@@ -99,7 +93,6 @@ export default function PostsStep() {
                   </li>
                 ))}
               </ol>
-              <p className="mt-3 text-sm text-navy-700">Posts you didn&apos;t pick get 0 points but still appear in your results. NextPlace never decides whether you are eligible for a post.</p>
             </Question>
           )}
         </>

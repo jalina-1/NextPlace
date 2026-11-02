@@ -9,6 +9,7 @@ import { useShell } from "@/lib/client/shell";
 import { CHAT_STEPS, type StepKey } from "@/lib/client/steps";
 import { Assistant } from "@/components/Assistant";
 import { cx } from "@/components/ui";
+import { StepNav } from "@/components/StepNav";
 
 const CHAT_KEY = "np-chat-open";
 
@@ -59,7 +60,10 @@ export default function ProjectLayout({ children }: { children: ReactNode }) {
     <ProjectContext.Provider value={{ info, reload }}>
       <div className={cx("flex min-h-full", withChat && "lg:h-[calc(100vh-61px)]")}>
         <div className={cx("min-w-0 flex-1 px-4 py-8 sm:px-8", withChat && "lg:overflow-y-auto")}>
-          <div className="mx-auto max-w-5xl">{children}</div>
+          <div className="mx-auto max-w-5xl">
+            {children}
+            {withChat && step && <StepNav projectId={id} step={step} hideNext={step === "final"} />}
+          </div>
         </div>
         {withChat && chatOpen && (
           <aside className="hidden w-[380px] shrink-0 flex-col border-l border-navy-100 bg-white lg:flex" aria-label="Assistant">

@@ -21,82 +21,51 @@ type Resp = {
 };
 
 const SORTS = [
-  ["score", "Weighted score"],
-  ["rank", "System rank"],
-  ["time", "Travel time"],
-  ["distance", "Road distance"],
-  ["post", "Post-preference score"],
-  ["climate", "Climate-match score"],
-  ["facilities", "Facility score"],
-  ["institution", "Institution"],
+  ["score", "Best match"],
+  ["time", "Closest first"],
   ["district", "District"],
-  ["index", "Original INDEX"],
+  ["institution", "Hospital name"],
 ] as const;
 
-const STATUS_BADGE: Record<string, { tone: "green" | "amber" | "red" | "neutral"; label: string }> = {
-  complete: { tone: "green", label: "Complete evidence" },
-  provisional: { tone: "amber", label: "Provisional" },
-  low_coverage: { tone: "amber", label: "Low evidence" },
-  unscored: { tone: "neutral", label: "Unscored" },
-  excluded: { tone: "neutral", label: "You can’t go here — kept at the bottom" },
-  not_considered: { tone: "neutral", label: "Not considered" },
-  incomplete: { tone: "red", label: "Incomplete row" },
-};
+type Point = { good: boolean | null; text: string };
 
-function RentBox({ projectId, row, onSaved }: { projectId: string; row: ResultRow; onSaved: () => void }) {
-  const [v, setV] = useState(row.userRentLkr == null ? "" : String(row.userRentLkr));
-  const [msg, setMsg] = useState<string | null>(null);
-  async function save() {
-    const n = v.trim() === "" ? null : Number(v.replace(/[^\d]/g, ""));
-    if (n != null && !Number.isFinite(n)) return setMsg("Enter the rent as a number, e.g. 35000.");
-    try {
-      await api(`/api/projects/${projectId}/options/${row.id}/rent`, { method: "POST", json: { rentLkr: n } });
-      setMsg("Saved.");
-      onSaved();
-    } catch (e) {
-      setMsg(errMsg(e));
-    }
+/** Two or three plain-language points about an option (no numbers or jargon). */
+function keyPoints(r: ResultRow): Point[] {
+  const pts: Point[] = [];
+  if (r.lockedToBottom) pts.push({ good: false, text: "On your “can’t go” list" });
+  const c = (k: string) => r.breakdown.find((b) => b.criterion === k && b.enabled && b.weight > 0);
+  const post = c("post");
+  if (post?.score != null) pts.push(post.score >= 100 ? { good: true, text: "Your first-choice post" } : post.score > 0 ? { good: true, text: "One of the posts you picked" } : { good: false, text: "Not a post you picked" });
+  const travel = c("travel");
+  const mins = r.travel.minutes;
+  if (travel?.score != null) {
+    const when = mins != null ? ` (about ${fmtMin(mins)})` : "";
+    pts.push(travel.score >= 70 ? { good: true, text: `Short journey${when}` } : travel.score <= 30 ? { good: false, text: `Long journey${when}` } : { good: null, text: `Medium journey${when}` });
   }
-  return (
-    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-navy-50 px-3 py-2 text-sm">
-      <a href={row.rentalSearchUrl!} target="_blank" rel="noreferrer noopener" className="font-semibold text-teal-800 underline">
-        Check rents nearby ↗
-      </a>
-      <span className="text-navy-700">Found a price? Rent per month (Rs.):</span>
-      <Input aria-label={`Monthly rent you found near ${row.institution}`} inputMode="numeric" className="w-32 py-1" value={v} onChange={(e) => setV(e.target.value.replace(/[^\d]/g, ""))} placeholder="e.g. 35000" />
-      <Button size="sm" variant="secondary" onClick={save}>Save</Button>
-      {row.userRentLkr != null && <Badge tone="teal">You entered Rs. {row.userRentLkr.toLocaleString("en-LK")}</Badge>}
-      {msg && <span className="text-xs text-navy-700">{msg}</span>}
-    </div>
-  );
+  const loc = c("location");
+  if (loc?.score != null && loc.score > 0) pts.push({ good: true, text: "A place you like" });
+  const climate = c("climate");
+  if (climate?.score != null && (climate.score >= 70 || climate.score <= 30)) pts.push(climate.score >= 70 ? { good: true, text: "Weather you like" } : { good: false, text: "Not the weather you prefer" });
+  const fac = c("facilities");
+  if (fac?.score != null && (fac.score >= 70 || fac.score <= 30)) pts.push(fac.score >= 70 ? { good: true, text: "Schools and shops nearby" } : { good: false, text: "Few schools or shops nearby" });
+  return pts.slice(0, 3);
 }
 
 export default function ResultsPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [view, setView] = useState<"ranked" | "unranked" | "all">("ranked");
   const [sort, setSort] = useState<string>("score");
-  const [dir, setDir] = useState<"" | "asc" | "desc">("");
   const [q, setQ] = useState("");
-  const [district, setDistrict] = useState("");
-  const [maxMinutes, setMaxMinutes] = useState("");
-  const [minCoverage, setMinCoverage] = useState("");
-  const [matched, setMatched] = useState(false);
   const [data, setData] = useState<Resp | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
 
   const load = useCallback(() => {
-    const p = new URLSearchParams({ view, sort });
-    if (dir) p.set("dir", dir);
+    const p = new URLSearchParams({ view: "ranked", sort });
     if (q) p.set("q", q);
-    if (district) p.set("district", district);
-    if (maxMinutes) p.set("maxMinutes", maxMinutes);
-    if (minCoverage) p.set("minCoverage", minCoverage);
-    if (matched) p.set("matchedPostsOnly", "true");
     api<Resp>(`/api/projects/${id}/results?${p}`).then(setData).catch((e) => setError(errMsg(e)));
-  }, [id, view, sort, dir, q, district, maxMinutes, minCoverage, matched]);
+  }, [id, sort, q]);
   useEffect(() => {
     const t = setTimeout(load, 200);
     return () => clearTimeout(t);
@@ -118,10 +87,11 @@ export default function ResultsPage() {
   return (
     <div className="space-y-5">
       {!data.premium && (
-        <Alert tone="info" title="Free preview: your top three">
-          These three were selected from the {basis?.evaluatedOptions ?? "?"} option(s) researched in your first analysis
-          {basis?.allEligibleEvaluated ? ", which covered every option you are considering." : ` — not the whole list of ${basis?.totalOptions ?? data.totalOptions}. They are not necessarily the best three overall.`}{" "}
-          You can sort, compare and re-weight these three. The remaining options stay hidden until you unlock full access.
+        <Alert tone="info" title="Your top three — free">
+          {basis?.allEligibleEvaluated
+            ? "These are your best three matches from your whole list."
+            : `These are the best three of the ${basis?.evaluatedOptions ?? "?"} options we checked for free, not necessarily the best of your whole list.`}{" "}
+          Unlock full access to see every option.
         </Alert>
       )}
       {data.run?.status === "running" && <Alert tone="info">Analysis is still running; results update as evidence arrives and are provisional.</Alert>}
@@ -129,29 +99,18 @@ export default function ResultsPage() {
         <p className="flex items-center gap-2 text-xs text-navy-700"><DemoBadge /> Some evidence below is synthetic demo data from the built-in demo providers, not real research.</p>
       )}
 
-      <Card>
-        <div className="flex flex-wrap items-end gap-3">
-          <Tabs label="Result view" value={view} onChange={setView} items={[{ value: "ranked", label: `Ranked${data.counts.ranked != null ? ` (${data.counts.ranked})` : ""}` }, { value: "unranked", label: `Not ranked${data.counts.unranked != null ? ` (${data.counts.unranked})` : ""}` }, { value: "all", label: "All" }]} />
-          <div className="flex items-end gap-2">
-            <div>
-              <label htmlFor="sort" className="block text-xs text-navy-700">Sort by</label>
-              <Select id="sort" value={sort} onChange={(e) => { setSort(e.target.value); setDir(""); }}>
-                {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </Select>
-            </div>
-            <Button variant="secondary" size="sm" aria-label="Toggle sort direction" onClick={() => setDir(dir === "asc" ? "desc" : "asc")}>{dir === "asc" ? "↑ Asc" : dir === "desc" ? "↓ Desc" : "Default"}</Button>
-          </div>
-          <Input aria-label="Search" placeholder="Search" className="w-40" value={q} onChange={(e) => setQ(e.target.value)} />
-          <Select aria-label="District" className="w-40" value={district} onChange={(e) => setDistrict(e.target.value)}>
-            <option value="">All districts</option>
-            {(data.districts ?? []).map((d) => <option key={d} value={d}>{d}</option>)}
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="relative min-w-48 flex-1">
+          <span className="sr-only">Search</span>
+          <Input placeholder="Search hospital, district or post" value={q} onChange={(e) => setQ(e.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-navy-800">
+          Sort by
+          <Select aria-label="Sort by" className="w-44" value={sort} onChange={(e) => setSort(e.target.value)}>
+            {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </Select>
-          <Input aria-label="Maximum travel minutes" placeholder="Max travel (min)" inputMode="numeric" className="w-36" value={maxMinutes} onChange={(e) => setMaxMinutes(e.target.value.replace(/\D/g, ""))} />
-          <Input aria-label="Minimum evidence coverage percent" placeholder="Min coverage %" inputMode="numeric" className="w-36" value={minCoverage} onChange={(e) => setMinCoverage(e.target.value.replace(/\D/g, ""))} />
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={matched} onChange={(e) => setMatched(e.target.checked)} /> Preferred posts only</label>
-        </div>
-        <p className="mt-3 text-xs text-navy-700">Unknown values always sort last, in either direction. Ties are broken by system rank, then import order. Change weights in <Link href={`/projects/${id}/preferences`} className="underline">Preferences → Weights</Link>; scores are recalculated from stored evidence.</p>
-      </Card>
+        </label>
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-navy-700">{data.rows.length} shown · {selected.length} selected for comparison{!data.premium && " (max 3)"}</p>
@@ -162,11 +121,10 @@ export default function ResultsPage() {
       </div>
 
       {data.rows.length === 0 ? (
-        <Empty title="No options match these filters" />
+        <Empty title="Nothing matches your search" />
       ) : (
         <ul className="space-y-3">
           {data.rows.map((r, i) => {
-            const st = STATUS_BADGE[r.status] ?? { tone: "neutral", label: r.status };
             return (
               <li key={r.id} className={cx("rounded-xl border bg-white shadow-sm", r.lockedToBottom ? "border-dashed border-navy-100 opacity-80" : "border-navy-100")}>
                 <div className="p-4">
@@ -184,12 +142,13 @@ export default function ResultsPage() {
                       <ScoreValue score={r.score} status={r.status} />
                     </div>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5 sm:pl-[5.25rem]">
-                    <Badge tone={st.tone}>{st.label}</Badge>
-                    <Badge>Evidence {r.coverage}%</Badge>
-                    {r.isDemoEvidence && <DemoBadge />}
-                    {r.preferenceRank && <Badge tone="teal">Your rank {r.preferenceRank}</Badge>}
-                  </div>
+                  {(r.coverage < 100 || r.isDemoEvidence || r.preferenceRank) && (
+                    <div className="mt-3 flex flex-wrap gap-1.5 sm:pl-[5.25rem]">
+                      {r.coverage < 100 && <Badge tone="amber">Some information missing</Badge>}
+                      {r.isDemoEvidence && <DemoBadge />}
+                      {r.preferenceRank && <Badge tone="teal">Your rank {r.preferenceRank}</Badge>}
+                    </div>
+                  )}
                   <dl className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-navy-50 px-3 py-2 text-xs sm:ml-[5.25rem]">
                     <div><dt className="text-navy-700">Travel</dt><dd className="tabular font-semibold">{fmtMin(r.travel.minutes)}</dd></div>
                     <div><dt className="text-navy-700">Road</dt><dd className="tabular font-semibold">{fmtKm(r.travel.roadKm)}</dd></div>
@@ -197,10 +156,16 @@ export default function ResultsPage() {
                   </dl>
                 </div>
                 <div className="border-t border-navy-100 px-4 py-2">
-                  <p className="text-sm text-navy-800">{r.explanation}</p>
-                  {r.rentalSearchUrl && <RentBox projectId={id} row={r} onSaved={load} />}
+                  <ul className="space-y-1 text-sm">
+                    {keyPoints(r).map((pt) => (
+                      <li key={pt.text} className="flex items-center gap-2">
+                        <span aria-hidden className={cx("font-bold", pt.good === true ? "text-teal-700" : pt.good === false ? "text-red-600" : "text-navy-700")}>{pt.good === true ? "✓" : pt.good === false ? "✗" : "•"}</span>
+                        <span className="text-navy-900">{pt.text}</span>
+                      </li>
+                    ))}
+                  </ul>
                   <button className="mt-1 text-sm font-medium text-teal-800 underline" aria-expanded={open === r.id} onClick={() => setOpen(open === r.id ? null : r.id)}>
-                    {open === r.id ? "Hide details" : "Score breakdown & sources"}
+                    {open === r.id ? "Hide details" : "Details"}
                   </button>
                   {open === r.id && (
                     <div className="mt-3 grid gap-4 pb-2 lg:grid-cols-2">
@@ -220,6 +185,13 @@ export default function ResultsPage() {
         </ul>
       )}
 
+
+      {(data.counts.unranked ?? 0) > 0 && (
+        <p className="rounded-xl bg-navy-50 px-4 py-3 text-sm text-navy-800">
+          {data.counts.unranked} option{data.counts.unranked === 1 ? "" : "s"} couldn&apos;t be ranked because some details are missing in your list.{" "}
+          <Link className="font-semibold text-teal-800 underline" href={`/projects/${id}/import`}>Fix them in step 1</Link>
+        </p>
+      )}
 
       {!data.premium && data.hiddenCount > 0 && (
         <div className={cx("rounded-xl border-2 border-dashed border-amber-200 bg-amber-50 p-6 text-center")}>

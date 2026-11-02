@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -87,6 +87,8 @@ export default function FinalPage() {
   const [pinned, setPinned] = useState<string[]>([]);
   const [swapA, setSwapA] = useState<string | null>(null);
   const [tab, setTab] = useState<"list" | "compare">("list");
+  const [finalizing, setFinalizing] = useState(false);
+  const router = useRouter();
   const [restore, setRestore] = useState<Snap | null>(null);
   const desktop = useMediaQuery("(min-width: 1024px)");
   const revisionRef = useRef(0);
@@ -340,7 +342,6 @@ export default function FinalPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-navy-700">Revision {final.revision}{info?.project.isDemo ? " · demo project" : ""}</p>
-        {!finalized && <ButtonLink href={`/projects/${id}/export`}>Review & finalize</ButtonLink>}
       </div>
       {error && <Alert tone="error">{error}</Alert>}
       {!desktop ? (
@@ -356,6 +357,41 @@ export default function FinalPage() {
           </div>
         </>
       )}
+      <div className="flex flex-col items-stretch gap-3 rounded-2xl border border-teal-100 bg-teal-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+        {finalized ? (
+          <>
+            <p className="font-semibold text-navy-950">Your list is finalised.</p>
+            <ButtonLink href={`/projects/${id}/export`}>Download your list</ButtonLink>
+          </>
+        ) : (
+          <>
+            <div>
+              <p className="font-semibold text-navy-950">Happy with this order?</p>
+              <p className="text-sm text-navy-700">Finalise it to download your list as Excel. You can reopen it later.</p>
+              {(final.validation ?? []).map((v) => (
+                <p key={v} className="mt-2 text-sm font-medium text-red-700" role="alert">⚠ {v}</p>
+              ))}
+            </div>
+            <Button
+              disabled={finalizing || (final.validation ?? []).length > 0}
+              onClick={async () => {
+                if (save !== "saved") return setError("Please wait until your changes are saved.");
+                setFinalizing(true);
+                try {
+                  await api(`/api/projects/${id}/final`, { method: "POST", json: { action: "finalize", expectedRevision: revisionRef.current } });
+                  router.push(`/projects/${id}/export`);
+                } catch (e) {
+                  setError(errMsg(e));
+                  setFinalizing(false);
+                }
+              }}
+              className="px-6 py-3"
+            >
+              {finalizing ? "Finalising…" : "Finalize list"}
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
