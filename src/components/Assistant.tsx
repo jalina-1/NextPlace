@@ -84,12 +84,15 @@ export function Assistant({ projectId, onApplied }: { projectId: string; onAppli
     setError(null);
     const msg = text;
     setText("");
+    setMsgs((m) => [...m, { id: "pending", role: "user", content: msg, mode, proposal: null }]);
     try {
       const r = await api<{ mode: string; reply: string; proposal: Proposal | null }>(`/api/projects/${projectId}/assistant`, { method: "POST", json: { message: msg } });
-      setMsgs((m) => [...m, { id: crypto.randomUUID(), role: "user", content: msg, mode: r.mode, proposal: null }, { id: crypto.randomUUID(), role: "assistant", content: r.reply, mode: r.mode, proposal: r.proposal }]);
+      setMsgs((m) => [...m.filter((x) => x.id !== "pending"), { id: crypto.randomUUID(), role: "user", content: msg, mode: r.mode, proposal: null }, { id: crypto.randomUUID(), role: "assistant", content: r.reply, mode: r.mode, proposal: r.proposal }]);
+      onApplied();
     } catch (err) {
       setError(errMsg(err));
       setText(msg);
+      setMsgs((m) => m.filter((x) => x.id !== "pending"));
     } finally {
       setBusy(false);
     }
@@ -121,6 +124,11 @@ export function Assistant({ projectId, onApplied }: { projectId: string; onAppli
             {m.proposal && <ProposalCard projectId={projectId} p={m.proposal} onApplied={onApplied} />}
           </div>
         ))}
+        {busy && (
+          <div className="mr-6 flex items-center gap-2 rounded-2xl rounded-bl-sm bg-white px-3 py-2 text-sm text-navy-700 shadow-sm" role="status">
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-teal-600 border-t-transparent" aria-hidden /> Looking into it… this can take a minute when searching online.
+          </div>
+        )}
         <div ref={end} />
       </div>
       {error && <div className="mt-2"><Alert tone="error">{error}</Alert></div>}

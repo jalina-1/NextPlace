@@ -175,6 +175,19 @@ export default function ResultsPage() {
                         {r.climate && <p className="text-xs">Climate: {r.climate.meanTempC ?? "?"} °C mean · {r.climate.annualRainMm ?? "?"} mm/yr</p>}
                         {r.facilities && <p className="text-xs">Within {r.facilities.radiusKm} km: {Object.entries(r.facilities.counts).map(([k, v]) => `${k} ${v ?? "?"}`).join(", ")}</p>}
                         <p className="text-xs text-navy-700">Source row: {r.sourceRef}</p>
+                        {(r.findings ?? []).length > 0 && (
+                          <div className="rounded-lg bg-teal-50 p-3">
+                            <p className="text-xs font-semibold text-teal-800">Found by your assistant</p>
+                            <ul className="mt-1 space-y-1.5 text-xs text-navy-900">
+                              {r.findings!.map((f, k) => (
+                                <li key={k}>
+                                  <span className="font-semibold">{f.topic}:</span> {f.summary}{" "}
+                                  <a href={f.sourceUrl} target="_blank" rel="noreferrer noopener" className="text-teal-800 underline">source</a>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}

@@ -13,6 +13,7 @@ export type ResultRow = {
   userRentLkr: number | null;
   rentalSearchUrl: string | null;
   lockedToBottom: boolean;
+  findings?: { topic: string; summary: string; sourceUrl: string; createdAt: string }[];
   systemRank: number | null;
   preferenceRank: number | null;
   status: string;

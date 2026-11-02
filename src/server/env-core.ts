@@ -80,7 +80,7 @@ export const env = {
     return pick("ANTHROPIC_API_KEY");
   },
   get anthropicModel() {
-    return pick("ANTHROPIC_MODEL") ?? "claude-sonnet-5-5";
+    return pick("ANTHROPIC_MODEL") ?? "claude-opus-5-5";
   },
   get googleVisionKey() {
     return pick("GOOGLE_VISION_API_KEY");

@@ -497,3 +497,20 @@ export const emailOutbox = pgTable("email_outbox", {
   createdAt: now("created_at"),
 });
 
+
+/** Facts the research assistant found online. Every finding must carry a source URL. */
+export const botFinding = pgTable(
+  "bot_finding",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    optionId: text("option_id").references(() => option.id, { onDelete: "cascade" }),
+    topic: text("topic").notNull(),
+    summary: text("summary").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    createdAt: now("created_at"),
+  },
+  (t) => [index("bot_finding_project_idx").on(t.projectId, t.optionId)],
+);

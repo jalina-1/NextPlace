@@ -59,7 +59,9 @@ export function rentalSearchUrl(institution: string | null, district: string | n
   return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
 }
 
-function toRow(o: typeof schema.option.$inferSelect, r: OptionScoreResult, b: OptionEvidenceBundle | undefined, prefs: Preferences, preferenceRank: number | null) {
+type Finding = { topic: string; summary: string; sourceUrl: string; createdAt: Date };
+
+function toRow(o: typeof schema.option.$inferSelect, r: OptionScoreResult, b: OptionEvidenceBundle | undefined, prefs: Preferences, preferenceRank: number | null, findings: Finding[] = []) {
   const primary = b?.evidence.travel?.primary ?? null;
   return {
     id: o.id,
@@ -74,6 +76,7 @@ function toRow(o: typeof schema.option.$inferSelect, r: OptionScoreResult, b: Op
     userRentLkr: o.userRentLkr,
     rentalSearchUrl: prefs.rental.looking ? rentalSearchUrl(o.institution, o.district, prefs) : null,
     lockedToBottom: r.status === "excluded",
+    findings: findings.map((f) => ({ topic: f.topic, summary: f.summary, sourceUrl: f.sourceUrl, createdAt: f.createdAt })),
     systemRank: r.systemRank,
     preferenceRank,
     status: r.status,
@@ -188,9 +191,16 @@ export async function getResults(projectId: string, user: CurrentUser, query: z.
   const { prefs, options, bundles, results } = await computeScores(projectId);
   const ranks = ctx.premium ? await finalRanks(projectId) : new Map<string, number>();
   const byId = new Map(options.map((o) => [o.id, o]));
+  const found = await db
+    .select({ optionId: schema.botFinding.optionId, topic: schema.botFinding.topic, summary: schema.botFinding.summary, sourceUrl: schema.botFinding.sourceUrl, createdAt: schema.botFinding.createdAt })
+    .from(schema.botFinding)
+    .where(eq(schema.botFinding.projectId, projectId))
+    .orderBy(desc(schema.botFinding.createdAt));
+  const findingsBy = new Map<string, typeof found>();
+  for (const f of found) if (f.optionId) findingsBy.set(f.optionId, [...(findingsBy.get(f.optionId) ?? []), f]);
   // Access filter FIRST — nothing beyond this point can reveal restricted rows.
   const accessible = results.filter((r) => isAccessible(ctx, r.optionId));
-  let rows = accessible.map((r) => toRow(byId.get(r.optionId)!, r, bundles.get(r.optionId), prefs, ranks.get(r.optionId) ?? null));
+  let rows = accessible.map((r) => toRow(byId.get(r.optionId)!, r, bundles.get(r.optionId), prefs, ranks.get(r.optionId) ?? null, findingsBy.get(r.optionId) ?? []));
   if (!ctx.premium) {
     // Ranks within the full list would leak information about hidden rows.
     rows = rows.map((row) => ({ ...row, systemRank: null }));
