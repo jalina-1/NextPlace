@@ -91,6 +91,9 @@ export const env = {
   get groqModel() {
     return pick("GROQ_MODEL") ?? "openai/gpt-oss-120b";
   },
+  get groqSearchModel() {
+    return pick("GROQ_SEARCH_MODEL") ?? "groq/compound-mini";
+  },
   get grokKey() {
     return pick("XAI_API_KEY");
   },

@@ -60,6 +60,7 @@ const SYSTEM = `You are the NextPlace assistant. You help a doctor in Sri Lanka 
 How to work:
 - Use the tools to read the user's answers (get_preferences) and their options (list_options, get_option). Refer to options by their ref, like "#3". Only refs returned by the tools exist.
 - When the user asks about something not in the stored data (for example schools, transport, hospital services, nearby rentals), use web_search. Prefer official and well-known Sri Lankan sources.
+- For travel questions, use the user's home town from their saved answers and the hospital's town. Search for the bus route numbers (SLTB/NTC routes, e.g. "Kurunegala to Kandy bus route number"), express/intercity options and trains, and give the route number, where to board and roughly how long it takes, with the source. If you can't find a route number, say so plainly.
 - Save every useful fact you find online with save_finding, always with the exact source URL. Never save a fact without a source.
 - To change the list order or the weights, call propose_change. The user sees a preview and decides whether to apply it. Never say a change has been made.
 - Reply in the user's language (Sinhala, Tamil or English). Keep replies short and plain — no jargon, no formulas.
@@ -371,9 +372,24 @@ export async function runBot(
           : { apiKey: env.grokKey, baseURL: "https://api.x.ai/v1" },
     );
     const [first, ...rest] = or ? env.openrouterModels : [which === "groq" ? env.groqModel : env.grokModel];
+    // Groq: web search through its "compound" model, which searches the internet itself.
+    const groqSearch: ToolSpec = {
+      name: "web_search",
+      description: "Search the internet. Returns a short factual answer with the source links. Use it for bus routes and numbers, schools, services and anything not in the user's data.",
+      inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+      run: async (input) => {
+        const q = String((input as { query: string }).query).slice(0, 500);
+        const r = (await client.chat.completions.create({
+          model: env.groqSearchModel,
+          messages: [{ role: "user", content: `Search the web and answer briefly with facts only. List the exact source URLs you used at the end.\n\nQuestion: ${q}` }],
+        } as never)) as unknown as { choices: { message: { content?: string | null } }[] };
+        return r.choices?.[0]?.message?.content ?? "No result.";
+      },
+    };
+    const toolSpecs = which === "groq" ? [...specs, groqSearch] : specs;
     type Msg = Record<string, unknown>;
-    const msgs: Msg[] = [{ role: "system", content: sys(or) }, ...history10.map((h) => ({ role: h.role, content: h.content })), { role: "user", content: message }];
-    const tools = specs.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
+    const msgs: Msg[] = [{ role: "system", content: sys(or || which === "groq") }, ...history10.map((h) => ({ role: h.role, content: h.content })), { role: "user", content: message }];
+    const tools = toolSpecs.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
     for (let i = 0; i < 12; i++) {
       const res = (await client.chat.completions.create({
         model: first,
@@ -388,7 +404,7 @@ export async function runBot(
       if (!calls.length) return done((m.content ?? "").trim(), which);
       msgs.push(m);
       for (const c of calls) {
-        const spec = specs.find((t) => t.name === c.function.name);
+        const spec = toolSpecs.find((t) => t.name === c.function.name);
         let out: string;
         try {
           out = spec ? await spec.run(JSON.parse(c.function.arguments || "{}")) : "Unknown tool.";
