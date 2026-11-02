@@ -224,15 +224,15 @@ export async function runBot(
     // runs a separate Google Search–grounded request and returns the text with source links.
     const genai = new GoogleGenAI({ apiKey: env.geminiKey });
     const model = env.geminiModel;
-    // Gemini's free models often answer 503 "high demand" / 429; wait and try again a few times.
+    // Gemini's free models often answer 503 "high demand" / 429; wait briefly and try twice more, then let a backup provider answer.
     const generate: typeof genai.models.generateContent = async (req) => {
       for (let attempt = 0; ; attempt++) {
         try {
           return await genai.models.generateContent(req);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          if (attempt >= 4 || !/"code":\s*(503|429|500)|UNAVAILABLE|RESOURCE_EXHAUSTED/.test(msg)) throw e;
-          await new Promise((r) => setTimeout(r, 1500 * 2 ** attempt));
+          if (attempt >= 2 || !/"code":\s*(503|429|500)|UNAVAILABLE|RESOURCE_EXHAUSTED/.test(msg)) throw e;
+          await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
         }
       }
     };
