@@ -1,3 +1,4 @@
+import {startupDiagnostic} from "../server/diagnostics.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
 let application: Promise<any> | undefined;
 export default async function handler(
@@ -41,7 +42,8 @@ export default async function handler(
   try {
     const app = await application;
     app(req, res);
-  } catch {
+  } catch (error) {
+    console.error(JSON.stringify(startupDiagnostic(error)));
     res.statusCode = 503;
     res.setHeader("Content-Type", "application/json");
     res.end(
