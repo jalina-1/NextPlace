@@ -213,6 +213,12 @@ export async function runBot(
   ];
 
   const history10 = history.slice(-10);
+  // Give every model the user's saved answers up front so it never asks for them again.
+  const prefsTool = specs.find((t) => t.name === "get_preferences")!;
+  const prefsText = await prefsTool.run({});
+  const sys = (search: boolean) =>
+    `${SYSTEM}\n\nThe user's saved answers (already known — never ask the user for these; use them directly):\n${prefsText}` +
+    (search ? "" : "\n\nWeb search is NOT available right now. Do not call web_search. For outside facts (bus routes, schools, etc.) give general guidance and say it should be checked locally.");
   const done = (reply: string, stop: string) => {
     const r = reply || (action ? "I've prepared a change for you to review." : "I couldn't find an answer to that.");
     logger.info("bot.reply", { projectId, findings, proposed: !!action, stop });
@@ -260,7 +266,7 @@ export async function runBot(
       { role: "user", parts: [{ text: message }] },
     ];
     const config = {
-      systemInstruction: SYSTEM,
+      systemInstruction: sys(true),
       tools: [{ functionDeclarations: all.map((t) => ({ name: t.name, description: t.description, parametersJsonSchema: t.inputSchema })) }],
     };
     for (let i = 0; i < 12; i++) {
@@ -295,7 +301,7 @@ export async function runBot(
       { type: "web_search" },
     ];
     for (let i = 0; i < 12; i++) {
-      const res = (await client.responses.create({ model: env.openaiModel, instructions: SYSTEM, input, tools } as never)) as { output: Item[]; output_text?: string };
+      const res = (await client.responses.create({ model: env.openaiModel, instructions: sys(true), input, tools } as never)) as { output: Item[]; output_text?: string };
       const calls = res.output.filter((o) => o.type === "function_call") as { name: string; arguments: string; call_id: string }[];
       if (!calls.length) {
         const text =
@@ -338,7 +344,7 @@ export async function runBot(
     max_iterations: 12,
     ...(fullFeatures ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
     output_config: { effort: "medium" },
-    system: SYSTEM,
+    system: sys(true),
     tools: [...tools, fullFeatures ? { type: "web_search_20260209" as const, name: "web_search" as const, max_uses: 5 } : { type: "web_search_20250305" as const, name: "web_search" as const, max_uses: 5 }],
     messages,
   });
@@ -366,7 +372,7 @@ export async function runBot(
     );
     const [first, ...rest] = or ? env.openrouterModels : [which === "groq" ? env.groqModel : env.grokModel];
     type Msg = Record<string, unknown>;
-    const msgs: Msg[] = [{ role: "system", content: SYSTEM }, ...history10.map((h) => ({ role: h.role, content: h.content })), { role: "user", content: message }];
+    const msgs: Msg[] = [{ role: "system", content: sys(or) }, ...history10.map((h) => ({ role: h.role, content: h.content })), { role: "user", content: message }];
     const tools = specs.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
     for (let i = 0; i < 12; i++) {
       const res = (await client.chat.completions.create({
