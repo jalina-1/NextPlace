@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { defaultPreferences, normalizeWeights, validateWeights, type Preferences } from "@/lib/preferences";
-import { scoreOption, scoreAll, postScore, lowerIsBetter, type ScorableOption, type OptionEvidence } from "@/lib/scoring";
+import { scoreOption, scoreAll, postScore, lowerIsBetter, lockTail, type ScorableOption, type OptionEvidence } from "@/lib/scoring";
 import { addCalendarMonthsColombo } from "@/lib/dates";
 
 function prefs(over: Partial<Preferences> = {}): Preferences {
@@ -124,16 +124,23 @@ describe("final score and missing data", () => {
     expect(r.coverage).toBe(0);
   });
 
-  it("keeps hard-excluded and incomplete rows but does not rank them", () => {
+  it("never removes 'never' options: ranks them below every other option, even with a higher score", () => {
     const p = prefs({ excludedDistricts: ["Jaffna"] });
-    const options = [opt("a", 0, { district: "Jaffna" }), opt("b", 1), opt("c", 2, { designation: null })];
-    const ranked = scoreAll(options, new Map(), p);
-    expect(ranked).toHaveLength(3);
+    const fast: OptionEvidence = fullEv(30, 18, 3);
+    const slow: OptionEvidence = fullEv(110, 28, 0);
+    const options = [opt("a", 0, { district: "Jaffna" }), opt("b", 1), opt("c", 2, { designation: null }), opt("d", 3, { district: "Galle" })];
+    const ranked = scoreAll(options, new Map([["a", fast], ["b", slow], ["d", slow]]), p);
     const byId = Object.fromEntries(ranked.map((r) => [r.optionId, r]));
+    expect(ranked).toHaveLength(4);
     expect(byId.a.status).toBe("excluded");
-    expect(byId.a.systemRank).toBeNull();
+    expect(byId.a.finalScore!).toBeGreaterThan(byId.b.finalScore!);
+    expect(byId.a.systemRank).toBe(3); // after b and d despite the higher score
     expect(byId.c.status).toBe("incomplete");
-    expect(byId.b.systemRank).toBe(1);
+    expect(byId.c.systemRank).toBeNull();
+  });
+
+  it("keeps locked options at the tail of any order", () => {
+    expect(lockTail(["x", "a", "y", "b"], new Set(["x", "y"]))).toEqual(["a", "b", "x", "y"]);
   });
 
   it("breaks ties deterministically by institution then import order", () => {

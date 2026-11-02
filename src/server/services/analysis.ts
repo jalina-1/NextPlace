@@ -11,7 +11,7 @@ import { providers } from "../providers";
 import { parsePreferences, validateWeights, type Preferences } from "@/lib/preferences";
 import { postScore } from "@/lib/scoring";
 import { colomboDateKey } from "@/lib/dates";
-import { recomputeScores, freezePreviewIfNeeded } from "./scores";
+import { recomputeScores, freezePreviewIfNeeded, computeScores } from "./scores";
 import { audit } from "./audit";
 import { climateKey, facilitiesKey, routeKey } from "./evidence-keys";
 import type { LocationCandidate } from "../db/schema";
@@ -341,7 +341,9 @@ export async function getProgress(projectId: string, user: CurrentUser) {
   const failed = run
     ? await db.select({ id: schema.job.id, type: schema.job.type, error: schema.job.lastError }).from(schema.job).where(and(eq(schema.job.analysisRunId, run.id), eq(schema.job.status, "failed"))).limit(20)
     : [];
+  const items = await liveItems(projectId, run?.id ?? null);
   return {
+    items,
     run: run
       ? { id: run.id, status: run.status, level: run.level, total: run.totalTasks, done: run.doneTasks, failed: run.failedTasks, optionCount: run.optionCount, evaluated: run.evaluatedOptionCount, createdAt: run.createdAt, finishedAt: run.finishedAt }
       : null,
@@ -350,6 +352,69 @@ export async function getProgress(projectId: string, user: CurrentUser) {
     resolved: locations.filter((l) => l.status === "auto" || l.status === "confirmed").length,
     failedJobs: failed.map((f) => ({ type: f.type, error: f.error })),
   };
+}
+
+export type LiveItem = {
+  key: string;
+  name: string;
+  district: string | null;
+  posts: string[];
+  optionCount: number;
+  /** queued | researching | done | needs_choice | not_found | failed */
+  state: string;
+  location: string | null;
+  travelMinutes: number | null;
+  roadKm: number | null;
+  meanTempC: number | null;
+  facilities: Record<string, number | null> | null;
+  providers: string[];
+  isDemo: boolean;
+};
+
+/** Per-institution research status for the live analysis view. Reads stored data only. */
+async function liveItems(projectId: string, runId: string | null): Promise<LiveItem[]> {
+  const { bundles, options, prefs } = await computeScores(projectId);
+  const pis = await db.select().from(schema.projectInstitution).where(eq(schema.projectInstitution.projectId, projectId));
+  const jobs = runId
+    ? ((await db.execute(sql`select status, payload->>'institutionKey' as key from job where analysis_run_id = ${runId} and type = 'geocode'`)).rows as { status: string; key: string }[])
+    : [];
+  const jobByKey = new Map(jobs.map((j) => [j.key, j.status]));
+  const byKey = new Map<string, typeof options>();
+  for (const o of options) if (o.institutionKey) byKey.set(o.institutionKey, [...(byKey.get(o.institutionKey) ?? []), o]);
+  const out: LiveItem[] = [];
+  for (const pi of pis) {
+    const opts = byKey.get(pi.institutionKey) ?? [];
+    if (!opts.length) continue;
+    const b = bundles.get(opts[0].id);
+    const job = jobByKey.get(pi.institutionKey);
+    const prim = b?.evidence.travel?.primary;
+    const hasTravel = !prefs.home || prim?.driveMinutes != null || prim?.transitMinutes != null || prim?.driveKm != null;
+    const hasClimate = b?.evidence.climate != null;
+    const hasFacilities = b?.evidence.facilities != null;
+    let state = "queued";
+    if (pi.status === "needs_confirmation") state = "needs_choice";
+    else if (pi.status === "not_found" || pi.status === "rejected") state = "not_found";
+    else if (job === "failed") state = "failed";
+    else if (pi.chosen && hasTravel && hasClimate && hasFacilities) state = "done";
+    else if (job === "running" || job === "succeeded" || pi.chosen) state = "researching";
+    out.push({
+      key: pi.institutionKey,
+      name: opts[0].institution ?? pi.institutionKey,
+      district: opts[0].district,
+      posts: Array.from(new Set(opts.map((o) => o.designation).filter((d): d is string => !!d))).slice(0, 4),
+      optionCount: opts.length,
+      state,
+      location: pi.chosen?.label ?? null,
+      travelMinutes: prim ? (prefs.travelMode === "public" ? prim.transitMinutes ?? null : prim.driveMinutes ?? prim.transitMinutes ?? null) : null,
+      roadKm: prim?.driveKm ?? null,
+      meanTempC: b?.evidence.climate?.meanTempC ?? null,
+      facilities: b?.evidence.facilities?.counts ?? null,
+      providers: Array.from(new Set((b?.refs ?? []).map((r) => r.provider))),
+      isDemo: !!(b?.location?.isDemo || b?.refs.some((r) => r.isDemo)),
+    });
+  }
+  const order: Record<string, number> = { needs_choice: 0, researching: 1, failed: 2, queued: 3, done: 4, not_found: 5 };
+  return out.sort((a, b) => order[a.state] - order[b.state] || a.name.localeCompare(b.name, "en"));
 }
 
 /** User confirms (or rejects) a location for an ambiguous institution. */

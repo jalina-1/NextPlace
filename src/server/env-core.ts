@@ -64,7 +64,8 @@ export const env = {
         | "google"
         | "overpass"
         | "demo",
-      ai: (pick("AI_PROVIDER") ?? (pick("ANTHROPIC_API_KEY") ? "anthropic" : "demo")) as "anthropic" | "demo" | "off",
+      // The research bot is not connected by default; the chat panel shows "coming soon".
+      ai: (pick("AI_PROVIDER") ?? (pick("ANTHROPIC_API_KEY") ? "anthropic" : "off")) as "anthropic" | "demo" | "off",
       ocr: (pick("OCR_PROVIDER") ?? (pick("GOOGLE_VISION_API_KEY") ? "google-vision" : pick("OCR_SPACE_API_KEY") ? "ocr-space" : "off")) as
         | "google-vision"
         | "ocr-space"

@@ -296,6 +296,29 @@ describe("premium: results, reordering, finalize, export", () => {
   });
 });
 
+describe("'never' options stay at the bottom", () => {
+  it("ranks them last in every sort, keeps them in the final list, and refuses to move them up or remove them", async () => {
+    const { preferences, revision } = await getPreferences(projectId, alice.user);
+    await savePreferences(projectId, alice.user, { ...preferences, excludedDistricts: ["Kandy"] }, revision);
+    await reopen(projectId, alice.user).catch(() => {});
+    for (const sort of ["score", "institution", "distance"] as const) {
+      const r = await getResults(projectId, alice.user, { sort, dir: "asc", view: "ranked" });
+      const firstLocked = r.rows.findIndex((x) => x.status === "excluded");
+      expect(firstLocked).toBeGreaterThan(0);
+      expect(r.rows.slice(firstLocked).every((x) => x.status === "excluded")).toBe(true);
+    }
+    const f = await getFinalOrder(projectId, alice.user);
+    const locked = new Set(f.lockedIds);
+    expect(locked.size).toBeGreaterThan(0);
+    expect(f.items.slice(-locked.size).every((id) => locked.has(id))).toBe(true);
+    const up = [...f.items];
+    const lockedId = up.pop()!;
+    up.unshift(lockedId);
+    await expectHttp(saveFinalOrder(projectId, alice.user, { expectedRevision: f.revision, items: up, excluded: f.excluded }), 400);
+    await expectHttp(saveFinalOrder(projectId, alice.user, { expectedRevision: f.revision, items: f.items.filter((id) => id !== lockedId), excluded: [...f.excluded, lockedId] }), 400);
+  });
+});
+
 describe("formula injection guard", () => {
   it("prefixes dangerous text but leaves numbers and negatives", () => {
     expect(safeCell("=SUM(A1)")).toBe("'=SUM(A1)");

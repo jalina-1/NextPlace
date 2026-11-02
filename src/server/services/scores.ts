@@ -176,7 +176,7 @@ export async function freezePreviewIfNeeded(projectId: string, runId: string) {
   const evaluated = new Set(run.evaluatedOptionIds);
   const scores = await db.select().from(schema.optionScore).where(eq(schema.optionScore.scoreRunId, sr.id));
   const ranked = scores
-    .filter((s) => s.systemRank != null && evaluated.has(s.optionId) && s.finalScore != null)
+    .filter((s) => s.systemRank != null && s.status !== "excluded" && evaluated.has(s.optionId) && s.finalScore != null)
     .sort((a, b) => (a.systemRank ?? 0) - (b.systemRank ?? 0));
   const ids = ranked.slice(0, 3).map((s) => s.optionId);
   const eligible = scores.filter((s) => ["complete", "provisional", "low_coverage", "unscored"].includes(s.status)).length;

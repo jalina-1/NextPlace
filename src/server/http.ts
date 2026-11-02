@@ -32,8 +32,21 @@ export function handle<A extends unknown[]>(fn: (...args: A) => Promise<Response
 
 export function errorResponse(e: unknown): Response {
   if (e instanceof HttpError) return NextResponse.json({ error: e.code, message: e.message, ...e.extra }, { status: e.status });
-  if (e instanceof ZodError)
-    return NextResponse.json({ error: "validation", message: "Invalid input.", issues: e.issues.map((i) => ({ path: i.path.join("."), message: i.message })) }, { status: 400 });
+  if (e instanceof ZodError) {
+    const issues = e.issues.map((i) => ({ path: i.path.join("."), message: friendlyIssue(i) }));
+    return NextResponse.json({ error: "validation", message: issues.length === 1 ? issues[0].message : "Please check the highlighted fields.", issues }, { status: 400 });
+  }
   logger.error("request.failed", { error: e instanceof Error ? e.message : String(e) });
   return NextResponse.json({ error: "internal", message: "Something went wrong. Please try again." }, { status: 500 });
+}
+
+/** Turns Zod's technical messages into short, plain sentences shown next to the field. */
+function friendlyIssue(i: ZodError["issues"][number]): string {
+  const x = i as unknown as { code: string; minimum?: number | bigint; maximum?: number | bigint; origin?: string; input?: unknown };
+  const isText = x.origin === "string";
+  if (x.code === "too_small") return isText ? (Number(x.minimum) <= 1 ? "Please fill this in." : `Use at least ${x.minimum} characters.`) : `Enter ${x.minimum} or more.`;
+  if (x.code === "too_big") return isText ? `Use at most ${x.maximum} characters.` : `Enter ${x.maximum} or less.`;
+  if (x.code === "invalid_type") return x.input === undefined || x.input === null ? "Please fill this in." : "This value isn’t valid.";
+  if (x.code === "invalid_value" || x.code === "invalid_enum_value") return "Please choose one of the options.";
+  return "This value isn’t valid.";
 }

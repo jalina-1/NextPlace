@@ -13,6 +13,7 @@ import type { CurrentUser } from "../session";
 import { getOwnedProject } from "./projects";
 import { hasPremium } from "./access";
 import { computeScores, recomputeScores, latestScoreRun } from "./scores";
+import { isLockedToBottom, lockTail } from "@/lib/scoring";
 import { audit } from "./audit";
 
 export async function requirePremium(user: CurrentUser) {
@@ -32,12 +33,35 @@ export function validatePartition(allIds: string[], items: string[], excluded: s
   return problems;
 }
 
-/** Initial order: system ranking for rankable options; everything else listed as excluded. */
+/** Initial order: the system ranking ("never" options already at the bottom); unranked rows are left out. */
 async function initialOrder(projectId: string) {
   const { results } = await computeScores(projectId);
   const items = results.filter((r) => r.systemRank != null).map((r) => r.optionId);
   const excluded = results.filter((r) => r.systemRank == null).map((r) => r.optionId);
   return { items, excluded };
+}
+
+/** IDs the user marked as places they can never go to. They are locked to the bottom of the final list. */
+export async function lockedIds(projectId: string) {
+  const { results } = await computeScores(projectId);
+  return new Set(results.filter((r) => isLockedToBottom(r.status)).map((r) => r.optionId));
+}
+
+/** Locked options must be in the list (never left out) and form its tail. */
+export function validateLocked(items: string[], excluded: string[], locked: Set<string>): string[] {
+  const problems: string[] = [];
+  if (excluded.some((id) => locked.has(id))) problems.push("Options on your “never” list stay at the bottom of the list; they can’t be removed.");
+  const firstLocked = items.findIndex((id) => locked.has(id));
+  if (firstLocked >= 0 && items.slice(firstLocked).some((id) => !locked.has(id)))
+    problems.push("Options on your “never” list must stay at the bottom of the list.");
+  return problems;
+}
+
+/** Brings a stored order in line with the current "never" list (e.g. after preferences changed). */
+function normalizeLocked(items: string[], excluded: string[], locked: Set<string>) {
+  const ex = excluded.filter((id) => !locked.has(id));
+  const back = excluded.filter((id) => locked.has(id));
+  return { items: lockTail([...items, ...back], locked), excluded: ex };
 }
 
 export async function getFinalOrder(projectId: string, user: CurrentUser) {
@@ -50,12 +74,28 @@ export async function getFinalOrder(projectId: string, user: CurrentUser) {
     await db.insert(schema.finalOrder).values({ projectId, items: init.items, excluded: init.excluded, revision: 1 }).onConflictDoNothing();
     [f] = await db.select().from(schema.finalOrder).where(eq(schema.finalOrder.projectId, projectId)).limit(1);
   }
-  const revisions = await db
+  if (f.status === "editing") {
+    const locked = await lockedIds(projectId);
+    const n = normalizeLocked(f.items, f.excluded, locked);
+    if (JSON.stringify(n) !== JSON.stringify({ items: f.items, excluded: f.excluded })) {
+      const [u] = await db
+        .update(schema.finalOrder)
+        .set({ items: n.items, excluded: n.excluded, revision: sql`${schema.finalOrder.revision} + 1`, updatedAt: new Date() })
+        .where(and(eq(schema.finalOrder.projectId, projectId), eq(schema.finalOrder.revision, f.revision)))
+        .returning();
+      if (u) f = u;
+    }
+    return { ...f, lockedIds: [...locked], revisions: await revisionsOf(projectId) };
+  }
+  return { ...f, lockedIds: [...(await lockedIds(projectId))], revisions: await revisionsOf(projectId) };
+}
+
+async function revisionsOf(projectId: string) {
+  return db
     .select({ id: schema.finalOrderRevision.id, number: schema.finalOrderRevision.number, createdAt: schema.finalOrderRevision.createdAt })
     .from(schema.finalOrderRevision)
     .where(eq(schema.finalOrderRevision.projectId, projectId))
     .orderBy(desc(schema.finalOrderRevision.number));
-  return { ...f, revisions };
 }
 
 export const saveOrderInput = z.object({
@@ -70,6 +110,8 @@ export async function saveFinalOrder(projectId: string, user: CurrentUser, input
   const all = (await db.select({ id: schema.option.id }).from(schema.option).where(eq(schema.option.projectId, projectId))).map((o) => o.id);
   const problems = validatePartition(all, input.items, input.excluded);
   if (problems.length) throw errors.bad("The list is inconsistent; nothing was saved.", { problems: problems.slice(0, 10) });
+  const lockProblems = validateLocked(input.items, input.excluded, await lockedIds(projectId));
+  if (lockProblems.length) throw errors.bad(lockProblems[0], { problems: lockProblems });
   const res = await db
     .update(schema.finalOrder)
     .set({ items: input.items, excluded: input.excluded, revision: sql`${schema.finalOrder.revision} + 1`, updatedAt: new Date() })

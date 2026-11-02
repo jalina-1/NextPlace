@@ -21,7 +21,7 @@ import { getSettings } from "./settings";
 import { bump } from "./limits";
 import { colomboDateKey } from "@/lib/dates";
 import { CRITERIA, normalizeWeights, validateWeights, parsePreferences, type Preferences } from "@/lib/preferences";
-import { legMinutes, type OptionScoreResult } from "@/lib/scoring";
+import { isLockedToBottom, legMinutes, lockTail, type OptionScoreResult } from "@/lib/scoring";
 import { saveFinalOrder, validatePartition } from "./final-order";
 import { savePreferences } from "./preferences";
 import { logger } from "../logger";
@@ -159,6 +159,10 @@ export function buildPreview(ctx: Ctx, action: AssistantAction) {
       return pos.get(a)! - pos.get(b)!;
     });
   }
+  // "Never" options stay at the bottom and can't be left out, whatever the action.
+  const locked = new Set(ctx.accessible.filter((r) => isLockedToBottom(r.status)).map((r) => r.optionId));
+  excluded = excluded.filter((id) => !locked.has(id) || (items.push(id), false));
+  items = lockTail(Array.from(new Set(items)), locked);
   const all = [...ctx.order.items, ...ctx.order.excluded];
   const problems = validatePartition(all, items, excluded);
   if (problems.length) throw errors.bad("Proposal would lose or duplicate entries; rejected.");

@@ -5,7 +5,7 @@
  * never serialized — not blurred, not paginated, not sortable into view. Premium users
  * receive the full analyzed list.
  */
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "../db";
 import { errors } from "../http";
@@ -22,7 +22,8 @@ export type SortKey = (typeof SORT_KEYS)[number];
 export const resultsQuery = z.object({
   sort: z.enum(SORT_KEYS).default("score"),
   dir: z.enum(["asc", "desc"]).optional(),
-  view: z.enum(["ranked", "excluded", "all"]).default("ranked"),
+  /** ranked = all ranked options (the "never" list at the bottom); unranked = not considered / incomplete rows. */
+  view: z.enum(["ranked", "unranked", "all", "excluded"]).default("ranked"),
   q: z.string().max(100).optional(),
   district: z.string().max(80).optional(),
   maxMinutes: z.coerce.number().min(1).max(2000).optional(),
@@ -50,6 +51,14 @@ function crit(r: OptionScoreResult, c: string) {
   return r.breakdown.find((b) => b.criterion === c)?.score ?? null;
 }
 
+/** A web search for rentals near the option. NextPlace never fetches or invents rent prices. */
+export function rentalSearchUrl(institution: string | null, district: string | null, prefs: Preferences) {
+  const place = district ?? institution ?? "Sri Lanka";
+  const beds = prefs.rental.bedrooms ? ` ${prefs.rental.bedrooms} bedroom` : "";
+  const q = `house for rent${beds} ${place} site:ikman.lk OR site:lankapropertyweb.com`;
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+}
+
 function toRow(o: typeof schema.option.$inferSelect, r: OptionScoreResult, b: OptionEvidenceBundle | undefined, prefs: Preferences, preferenceRank: number | null) {
   const primary = b?.evidence.travel?.primary ?? null;
   return {
@@ -62,6 +71,9 @@ function toRow(o: typeof schema.option.$inferSelect, r: OptionScoreResult, b: Op
     vacancies: o.vacancies,
     sourceRef: o.sourceRef,
     flags: o.flags,
+    userRentLkr: o.userRentLkr,
+    rentalSearchUrl: prefs.rental.looking ? rentalSearchUrl(o.institution, o.district, prefs) : null,
+    lockedToBottom: r.status === "excluded",
     systemRank: r.systemRank,
     preferenceRank,
     status: r.status,
@@ -116,10 +128,16 @@ function crit2(row: ResultRow, c: string) {
   return row.breakdown.find((b) => b.criterion === c)?.score ?? null;
 }
 
-/** Unknown values always sort last in both directions; ties fall back to system rank then import order. */
+/**
+ * The user's "never" options always stay at the bottom, whatever the sort.
+ * Unknown values always sort last in both directions; ties fall back to system rank then import order.
+ */
 export function sortRows(rows: ResultRow[], key: SortKey, dir: "asc" | "desc") {
   const mul = dir === "asc" ? 1 : -1;
   return [...rows].sort((a, b) => {
+    const la = a.status === "excluded" ? 1 : 0;
+    const lb = b.status === "excluded" ? 1 : 0;
+    if (la !== lb) return la - lb;
     const va = sortValue(a, key);
     const vb = sortValue(b, key);
     if (va == null && vb != null) return 1;
@@ -182,13 +200,14 @@ export async function getResults(projectId: string, user: CurrentUser, query: z.
 
   const counts = {
     ranked: rows.filter((r) => r.systemRank != null || (!ctx.premium && ["complete", "provisional", "low_coverage", "unscored"].includes(r.status))).length,
-    excluded: rows.filter((r) => ["excluded", "not_considered", "incomplete"].includes(r.status)).length,
+    excluded: rows.filter((r) => r.status === "excluded").length,
+    unranked: rows.filter((r) => ["not_considered", "incomplete"].includes(r.status)).length,
     provisional: rows.filter((r) => r.status !== "complete" && r.score != null).length,
     demo: rows.filter((r) => r.isDemoEvidence).length,
   };
 
-  if (query.view === "ranked") rows = rows.filter((r) => !["excluded", "not_considered", "incomplete"].includes(r.status));
-  else if (query.view === "excluded") rows = rows.filter((r) => ["excluded", "not_considered", "incomplete"].includes(r.status));
+  if (query.view === "ranked") rows = rows.filter((r) => !["not_considered", "incomplete"].includes(r.status));
+  else if (query.view === "unranked" || query.view === "excluded") rows = rows.filter((r) => ["not_considered", "incomplete"].includes(r.status));
   if (query.q) {
     const q = normalizeText(query.q);
     rows = rows.filter((r) => normalizeText([r.institution, r.district, r.designation, r.index].join(" ")).includes(q));
@@ -231,5 +250,20 @@ export async function topAccessible(projectId: string, user: CurrentUser, n: num
   const ctx = await accessContext(projectId, user);
   if (!ctx.premium) return { premium: false, ids: (ctx.project.previewOptionIds ?? []).slice(0, Math.min(3, n)) };
   const { results } = await computeScores(projectId);
-  return { premium: true, ids: results.filter((r) => r.systemRank != null).slice(0, Math.max(1, Math.min(200, n))).map((r) => r.optionId) };
+  return { premium: true, ids: results.filter((r) => r.systemRank != null && r.status !== "excluded").slice(0, Math.max(1, Math.min(200, n))).map((r) => r.optionId) };
+}
+
+export const rentInput = z.object({ rentLkr: z.number().int().min(0).max(10_000_000).nullable() });
+
+/** Saves the monthly rent the user found themselves. Only for options the user can access. */
+export async function setUserRent(projectId: string, user: CurrentUser, optionId: string, rentLkr: number | null) {
+  const ctx = await accessContext(projectId, user);
+  if (!isAccessible(ctx, optionId)) throw errors.premium("This option is only available with full access.");
+  const res = await db
+    .update(schema.option)
+    .set({ userRentLkr: rentLkr })
+    .where(and(eq(schema.option.id, optionId), eq(schema.option.projectId, projectId)))
+    .returning({ id: schema.option.id });
+  if (!res.length) throw errors.notFound("Option not found.");
+  return { ok: true };
 }

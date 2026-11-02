@@ -195,6 +195,8 @@ export const option = pgTable(
     /** consider | not_considered — chosen by the user; never inferred from job title. */
     decision: text("decision").notNull().default("consider"),
     institutionKey: text("institution_key"),
+    /** Monthly rent the user found and typed in themselves (LKR). Never fetched or estimated. */
+    userRentLkr: integer("user_rent_lkr"),
     createdAt: now("created_at"),
   },
   (t) => [index("option_project_idx").on(t.projectId, t.seq)],

@@ -1,0 +1,1 @@
+ALTER TABLE "option" ADD COLUMN "user_rent_lkr" integer;

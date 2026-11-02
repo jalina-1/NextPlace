@@ -350,8 +350,10 @@ const STATUS_TIER: Record<ScoreStatus, number> = {
 };
 
 /**
- * Deterministic ranking. Rankable statuses (complete, provisional, low_coverage, unscored)
- * receive a system rank; excluded / not considered / incomplete rows are kept but unranked.
+ * Deterministic ranking. Rankable statuses (complete, provisional, low_coverage, unscored) are
+ * ranked first. Options the user said they can never go to ("excluded") are NOT removed: they are
+ * ranked too, but always after every other ranked option, ordered among themselves by score.
+ * Not-considered and incomplete rows are kept but unranked.
  * Tie-break: tier → score desc → coverage desc → post score desc → institution → import order.
  */
 export function rankOptions(
@@ -379,8 +381,18 @@ export function rankOptions(
     return oa.seq - ob.seq;
   });
   let rank = 0;
-  for (const r of list) r.systemRank = STATUS_TIER[r.status] <= 2 ? ++rank : null;
+  for (const r of list) r.systemRank = STATUS_TIER[r.status] <= 3 ? ++rank : null;
   return list;
+}
+
+/** Options pinned to the bottom of every ranking and final list (the user's "never" list). */
+export function isLockedToBottom(status: string) {
+  return status === "excluded";
+}
+
+/** Moves locked IDs to the end, keeping the relative order of both groups. */
+export function lockTail(items: string[], locked: Set<string>): string[] {
+  return [...items.filter((id) => !locked.has(id)), ...items.filter((id) => locked.has(id))];
 }
 
 export function scoreAll(options: ScorableOption[], evidence: Map<string, OptionEvidence>, prefs: Preferences): OptionScoreResult[] {

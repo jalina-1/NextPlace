@@ -70,6 +70,13 @@ export const preferencesSchema = z.object({
     notes: z.string().max(500),
   }),
 
+  /** "Are you looking for a house to rent?" Rent prices are never fetched or invented; the user checks and enters them. */
+  rental: z.object({
+    looking: z.boolean(),
+    maxMonthlyLkr: z.number().int().min(0).max(1_000_000).nullable(),
+    bedrooms: z.number().int().min(1).max(6).nullable(),
+  }),
+
   mandatory: z.object({
     /** Exclude options whose known travel time exceeds travel.maxMinutes. */
     maxTravelTime: z.boolean(),
@@ -117,6 +124,7 @@ export function defaultPreferences(): Preferences {
     climate: { temperature: "any", rainfall: "any" },
     facilities: { radiusKm: 5, schools: 2, shops: 1, pharmacies: 0, banks: 0 },
     accommodation: { wantsQuarters: false, notes: "" },
+    rental: { looking: false, maxMonthlyLkr: null, bedrooms: null },
     mandatory: { maxTravelTime: false, preferredPostsOnly: false, preferredDistrictsOnly: false },
     criteria: {
       post: { enabled: true, weight: 50 },
@@ -130,7 +138,8 @@ export function defaultPreferences(): Preferences {
   };
 }
 
-export type WeightIssue = { code: string; message: string };
+/** `field` is the dotted path of the form field the message belongs to (for highlighting). */
+export type WeightIssue = { code: string; message: string; field?: string };
 
 const EPS = 0.01;
 
@@ -138,12 +147,12 @@ const EPS = 0.01;
 export function validateWeights(criteria: Preferences["criteria"]): WeightIssue[] {
   const issues: WeightIssue[] = [];
   const enabled = CRITERIA.filter((c) => criteria[c].enabled);
-  if (enabled.length === 0) issues.push({ code: "none_enabled", message: "Enable at least one criterion." });
+  if (enabled.length === 0) issues.push({ code: "none_enabled", message: "Turn on at least one item.", field: "criteria" });
   const total = enabled.reduce((s, c) => s + criteria[c].weight, 0);
   if (enabled.length > 0 && Math.abs(total - 100) > EPS)
-    issues.push({ code: "total", message: `Enabled weights total ${round2(total)}%; they must total 100%.` });
+    issues.push({ code: "total", message: `Your percentages add up to ${round2(total)}%. They must add up to exactly 100% — press “Make it 100%”.`, field: "criteria" });
   for (const c of enabled) {
-    if (criteria[c].weight <= 0) issues.push({ code: "zero", message: `${c} is enabled but has 0% weight.` });
+    if (criteria[c].weight <= 0) issues.push({ code: "zero", message: `This item is turned on but has 0%. Give it a percentage or turn it off.`, field: `criteria.${c}` });
   }
   return issues;
 }
@@ -173,11 +182,11 @@ export function normalizeWeights(criteria: Preferences["criteria"]): Preferences
 export function validateThresholds(p: Pick<Preferences, "travel" | "postScoring">): WeightIssue[] {
   const issues: WeightIssue[] = [];
   if (p.travel.idealMinutes >= p.travel.maxMinutes)
-    issues.push({ code: "travel_minutes", message: `Ideal travel time (${p.travel.idealMinutes} min) must be less than the maximum travel time (${p.travel.maxMinutes} min).` });
+    issues.push({ code: "travel_minutes", message: `The longest journey (${p.travel.maxMinutes} min) must be longer than the comfortable journey (${p.travel.idealMinutes} min).`, field: "travel.maxMinutes" });
   if (p.travel.idealKm >= p.travel.maxKm)
-    issues.push({ code: "travel_km", message: `Ideal road distance (${p.travel.idealKm} km) must be less than the maximum road distance (${p.travel.maxKm} km).` });
+    issues.push({ code: "travel_km", message: `The longest distance (${p.travel.maxKm} km) must be more than the comfortable distance (${p.travel.idealKm} km).`, field: "travel.maxKm" });
   if (p.postScoring.floor > p.postScoring.firstChoice)
-    issues.push({ code: "post_floor", message: "The lowest matched post score cannot be higher than the 1st choice score." });
+    issues.push({ code: "post_floor", message: "The lowest points for a listed post can’t be higher than the points for your 1st choice.", field: "postScoring.floor" });
   return issues;
 }
 
@@ -190,7 +199,7 @@ export function parsePreferences(raw: unknown): Preferences {
   const d = defaultPreferences();
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const merged: Record<string, unknown> = { ...d, ...r };
-  for (const k of ["postScoring", "travel", "climate", "facilities", "accommodation", "mandatory", "criteria"] as const) {
+  for (const k of ["postScoring", "travel", "climate", "facilities", "accommodation", "rental", "mandatory", "criteria"] as const) {
     merged[k] = { ...(d[k] as object), ...((r[k] as object) ?? {}) };
   }
   const parsed = preferencesSchema.safeParse(merged);

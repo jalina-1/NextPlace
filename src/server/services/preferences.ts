@@ -21,7 +21,7 @@ export async function savePreferences(projectId: string, user: CurrentUser, raw:
   await getOwnedProject(projectId, user);
   const prefs: Preferences = preferencesSchema.parse(raw);
   const issues = [...validateThresholds(prefs), ...validateWeights(prefs.criteria)];
-  if (issues.length) throw errors.bad(issues.map((i) => i.message).join(" "), { issues });
+  if (issues.length) throw errors.bad(issues[0].message, { issues: issues.map((i) => ({ path: i.field ?? "", message: i.message })) });
   const res = await db
     .update(schema.preference)
     .set({ data: prefs, revision: sql`${schema.preference.revision} + 1`, updatedAt: new Date() })

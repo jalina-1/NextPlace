@@ -325,3 +325,20 @@ export async function optionCount(projectId: string) {
   const r = await db.select({ n: sql<number>`count(*)::int` }).from(schema.option).where(eq(schema.option.projectId, projectId));
   return r[0].n;
 }
+
+/** Distinct posts (designations) found in the user's own imported list, with how many rows and vacancies each has. */
+export async function listDesignations(projectId: string, user: CurrentUser) {
+  await getOwnedProject(projectId, user);
+  const rows = await db.select({ designation: schema.option.designation, vacancies: schema.option.vacancies }).from(schema.option).where(eq(schema.option.projectId, projectId));
+  const map = new Map<string, { name: string; rows: number; vacancies: number }>();
+  for (const r of rows) {
+    if (!r.designation) continue;
+    const key = normalizeText(r.designation);
+    const cur = map.get(key) ?? { name: r.designation, rows: 0, vacancies: 0 };
+    cur.rows++;
+    const v = Number(r.vacancies);
+    cur.vacancies += Number.isFinite(v) && v > 0 ? v : 0;
+    map.set(key, cur);
+  }
+  return { designations: [...map.values()].sort((a, b) => b.rows - a.rows || a.name.localeCompare(b.name, "en")) };
+}
