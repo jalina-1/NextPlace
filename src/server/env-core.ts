@@ -27,6 +27,8 @@ export const env = {
   get authSecret() {
     const s = pick("BETTER_AUTH_SECRET", "AUTH_SECRET");
     if (s) return s;
+    // During `next build` modules are evaluated to collect page data; no requests are served.
+    if (process.env.NEXT_PHASE === "phase-production-build") return "build-time-placeholder-secret-not-used-for-requests";
     if (process.env.NODE_ENV === "production" && !process.env.NEXTPLACE_ALLOW_DEV_SECRET) {
       // Fall back to the Supabase JWT secret only if present, never a constant in production.
       const jwt = pick("SUPABASE_JWT_SECRET");
