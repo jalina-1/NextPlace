@@ -226,6 +226,7 @@ async function main() {
 
     step("Compare top 5");
     await page.goto(`${BASE}/projects/${projectId}/compare`);
+    await page.waitForFunction(() => document.querySelectorAll("thead th").length >= 2);
     await page.getByLabel("Top N accessible options").fill("5");
     await page.getByRole("button", { name: /Use top/ }).click();
     await page.waitForFunction(() => document.querySelectorAll("thead th").length === 6);
