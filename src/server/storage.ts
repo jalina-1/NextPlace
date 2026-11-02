@@ -23,6 +23,10 @@ function safeKey(key: string) {
 class LocalStorage implements Storage {
   constructor(private dir: string) {}
   private p(key: string) {
+    if (process.env.VERCEL) {
+      // Serverless filesystems are ephemeral; never pretend files were stored privately and durably.
+      throw new Error("Private storage is not configured: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY) for this environment.");
+    }
     return path.join(path.resolve(this.dir), safeKey(key));
   }
   async put(key: string, data: Buffer) {
@@ -37,6 +41,7 @@ class LocalStorage implements Storage {
     await Promise.all(keys.map((k) => fs.rm(this.p(k), { force: true })));
   }
   async check() {
+    this.p("healthcheck");
     await fs.mkdir(path.resolve(this.dir), { recursive: true });
     return { ok: true, detail: `local:${this.dir}` };
   }

@@ -20,7 +20,7 @@ export const env = {
   get appUrl() {
     const explicit = pick("APP_URL", "BETTER_AUTH_URL");
     if (explicit) return explicit.replace(/\/$/, "");
-    const vercel = pick("VERCEL_PROJECT_PRODUCTION_URL", "VERCEL_URL");
+    const vercel = process.env.VERCEL_ENV === "production" ? pick("VERCEL_PROJECT_PRODUCTION_URL", "VERCEL_URL") : pick("VERCEL_BRANCH_URL", "VERCEL_URL");
     if (vercel) return `https://${vercel}`;
     return "http://localhost:3000";
   },

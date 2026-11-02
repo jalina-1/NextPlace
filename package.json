@@ -16,6 +16,7 @@
     "seed:demo": "tsx scripts/seed-demo.ts",
     "test": "vitest run",
     "test:e2e": "tsx e2e/run-e2e.ts",
+    "check:connections": "tsx scripts/check-connections.ts",
     "vercel-build": "tsx scripts/migrate.ts && next build"
   },
   "dependencies": {
