@@ -1,0 +1,28 @@
+export type Criterion = { criterion: "post" | "travel" | "climate" | "facilities" | "location"; enabled: boolean; weight: number; score: number | null; known: number; detail: string };
+export type Source = { kind: string; provider: string; retrievedAt: string; isDemo: boolean; sourceUrl: string | null; attribution: string | null; status: string; context: unknown; value: unknown };
+export type ResultRow = {
+  id: string;
+  seq: number;
+  index: string | null;
+  institution: string | null;
+  district: string | null;
+  designation: string | null;
+  vacancies: string | null;
+  sourceRef: string;
+  flags: string[];
+  systemRank: number | null;
+  preferenceRank: number | null;
+  status: string;
+  score: number | null;
+  coverage: number;
+  breakdown: Criterion[];
+  exclusionReasons: string[];
+  warnings: string[];
+  explanation: string;
+  travel: { minutes: number | null; driveMinutes: number | null; transitMinutes: number | null; roadKm: number | null; straightKm: number | null };
+  climate: { meanTempC: number | null; annualRainMm: number | null } | null;
+  facilities: { radiusKm: number; counts: Record<string, number | null> } | null;
+  location: { status: string; label: string | null; isDemo: boolean } | null;
+  isDemoEvidence: boolean;
+  sources: Source[];
+};

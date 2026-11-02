@@ -1,0 +1,9 @@
+process.env.DATABASE_URL ??= "postgresql://np:np@localhost:5432/nextplace_test";
+process.env.STORAGE_DRIVER = "local";
+process.env.LOCAL_STORAGE_DIR = ".data/test-storage";
+process.env.MAPS_PROVIDER = "demo";
+process.env.CLIMATE_PROVIDER = "demo";
+process.env.FACILITIES_PROVIDER = "demo";
+process.env.AI_PROVIDER = "demo";
+process.env.OCR_PROVIDER = "off";
+process.env.EMAIL_PROVIDER = "outbox";
