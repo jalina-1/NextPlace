@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { query, transaction } from "./db.ts";
-import { rank } from "./domain.ts";
-import { research } from "./providers.ts";
+import { query, transaction } from "./db.js";
+import { rank } from "./domain.js";
+import { research } from "./providers.js";
 // A database lease survives process suspension. Provider calls happen outside transactions.
 export async function advanceJob(projectId?: string) {
   const token = randomUUID();

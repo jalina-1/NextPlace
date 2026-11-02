@@ -1,4 +1,4 @@
-import {startupDiagnostic} from "../server/diagnostics.ts";
+import {startupDiagnostic} from "../server/diagnostics.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 let application: Promise<any> | undefined;
 export default async function handler(
@@ -33,7 +33,7 @@ export default async function handler(
       pathname.replace(/^\/+/, "") +
       (url.search ? "?" + url.searchParams.toString() : "");
   }
-  application ??= import("../server/index.ts")
+  application ??= import("../server/index.js")
     .then((m) => m.app)
     .catch((e) => {
       application = undefined;
