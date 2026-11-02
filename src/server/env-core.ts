@@ -1,0 +1,119 @@
+/**
+ * Server environment. Never import this from client components.
+ * Values fall back to safe local-development defaults.
+ */
+function pick(...names: string[]): string | undefined {
+  for (const n of names) {
+    const v = process.env[n];
+    if (v && v.trim() !== "") return v.trim();
+  }
+  return undefined;
+}
+
+export const env = {
+  get databaseUrl() {
+    return (
+      pick("DATABASE_URL", "POSTGRES_URL", "POSTGRES_PRISMA_URL") ??
+      "postgresql://np:np@localhost:5432/nextplace"
+    );
+  },
+  get appUrl() {
+    const explicit = pick("APP_URL", "BETTER_AUTH_URL");
+    if (explicit) return explicit.replace(/\/$/, "");
+    const vercel = pick("VERCEL_PROJECT_PRODUCTION_URL", "VERCEL_URL");
+    if (vercel) return `https://${vercel}`;
+    return "http://localhost:3000";
+  },
+  get authSecret() {
+    const s = pick("BETTER_AUTH_SECRET", "AUTH_SECRET");
+    if (s) return s;
+    if (process.env.NODE_ENV === "production" && !process.env.NEXTPLACE_ALLOW_DEV_SECRET) {
+      // Fall back to the Supabase JWT secret only if present, never a constant in production.
+      const jwt = pick("SUPABASE_JWT_SECRET");
+      if (jwt) return jwt;
+      throw new Error("BETTER_AUTH_SECRET must be set in production");
+    }
+    return "dev-only-secret-change-me-dev-only-secret-change-me";
+  },
+  get storageDriver(): "local" | "supabase" {
+    const d = pick("STORAGE_DRIVER");
+    if (d === "local" || d === "supabase") return d;
+    return pick("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL") && pick("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEY")
+      ? "supabase"
+      : "local";
+  },
+  get localStorageDir() {
+    return pick("LOCAL_STORAGE_DIR") ?? ".data/storage";
+  },
+  get supabaseUrl() {
+    return pick("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL");
+  },
+  get supabaseServiceKey() {
+    return pick("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEY");
+  },
+  get supabaseBucket() {
+    return pick("SUPABASE_STORAGE_BUCKET") ?? "nextplace-private";
+  },
+  get providers() {
+    return {
+      maps: (pick("MAPS_PROVIDER") ?? (pick("GOOGLE_MAPS_API_KEY") ? "google" : "demo")) as "google" | "osm" | "demo",
+      climate: (pick("CLIMATE_PROVIDER") ?? "demo") as "open-meteo" | "demo",
+      facilities: (pick("FACILITIES_PROVIDER") ?? (pick("GOOGLE_MAPS_API_KEY") ? "google" : "demo")) as
+        | "google"
+        | "overpass"
+        | "demo",
+      ai: (pick("AI_PROVIDER") ?? (pick("ANTHROPIC_API_KEY") ? "anthropic" : "demo")) as "anthropic" | "demo" | "off",
+      ocr: (pick("OCR_PROVIDER") ?? (pick("GOOGLE_VISION_API_KEY") ? "google-vision" : pick("OCR_SPACE_API_KEY") ? "ocr-space" : "off")) as
+        | "google-vision"
+        | "ocr-space"
+        | "off",
+      email: (pick("EMAIL_PROVIDER") ?? (pick("RESEND_API_KEY") ? "resend" : "outbox")) as "resend" | "outbox",
+    };
+  },
+  get googleMapsKey() {
+    return pick("GOOGLE_MAPS_API_KEY");
+  },
+  get anthropicKey() {
+    return pick("ANTHROPIC_API_KEY");
+  },
+  get anthropicModel() {
+    return pick("ANTHROPIC_MODEL") ?? "claude-sonnet-5-5";
+  },
+  get googleVisionKey() {
+    return pick("GOOGLE_VISION_API_KEY");
+  },
+  get ocrSpaceKey() {
+    return pick("OCR_SPACE_API_KEY");
+  },
+  get resendKey() {
+    return pick("RESEND_API_KEY");
+  },
+  get emailFrom() {
+    return pick("EMAIL_FROM") ?? "NextPlace <no-reply@example.invalid>";
+  },
+  get osmContactEmail() {
+    return pick("OSM_CONTACT_EMAIL");
+  },
+  get cronSecret() {
+    return pick("CRON_SECRET");
+  },
+  get isProduction() {
+    return process.env.NODE_ENV === "production";
+  },
+};
+
+/** Provider status for the admin page. Reports configuration only — never secret values. */
+export function providerStatus() {
+  const p = env.providers;
+  return [
+    { capability: "Database", provider: env.databaseUrl.includes("supabase") ? "Supabase Postgres" : "PostgreSQL", configured: true },
+    { capability: "Private file storage", provider: env.storageDriver === "supabase" ? `Supabase Storage (bucket ${env.supabaseBucket})` : "Local filesystem (development)", configured: true },
+    { capability: "Geocoding & routes", provider: p.maps, configured: p.maps !== "demo", demo: p.maps === "demo" },
+    { capability: "Nearby facilities", provider: p.facilities, configured: p.facilities !== "demo", demo: p.facilities === "demo" },
+    { capability: "Climate", provider: p.climate, configured: p.climate !== "demo", demo: p.climate === "demo" },
+    { capability: "AI assistant", provider: p.ai, configured: p.ai === "anthropic" && !!env.anthropicKey, demo: p.ai === "demo" },
+    { capability: "OCR for scanned PDFs", provider: p.ocr, configured: p.ocr !== "off" },
+    { capability: "Email (password reset)", provider: p.email, configured: p.email === "resend" && !!env.resendKey },
+    { capability: "Scheduled worker secret", provider: "CRON_SECRET", configured: !!env.cronSecret },
+  ];
+}
