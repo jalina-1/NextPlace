@@ -350,13 +350,21 @@ export async function runBot(
   // OpenAI-compatible chat APIs (OpenRouter, xAI Grok) share one tool loop.
   const runOpenRouter = () => runChat("openrouter");
   const runGrok = () => runChat("grok");
-  const runChat = async (which: "openrouter" | "grok") => {
+  const runGroq = () => runChat("groq");
+  const runChat = async (which: "openrouter" | "grok" | "groq") => {
     // OpenRouter: one key, many models. OPENROUTER_MODELS is a comma list tried in order by
     // OpenRouter itself; the "web" plugin adds internet search results with source links.
     // Grok (xAI) runs without web search here.
     const or = which === "openrouter";
-    const client = new OpenAI(or ? { apiKey: env.openrouterKey, baseURL: "https://openrouter.ai/api/v1" } : { apiKey: env.grokKey, baseURL: "https://api.x.ai/v1" });
-    const [first, ...rest] = or ? env.openrouterModels : [env.grokModel];
+    // Groq (fast, free tier) also runs without web search.
+    const client = new OpenAI(
+      or
+        ? { apiKey: env.openrouterKey, baseURL: "https://openrouter.ai/api/v1" }
+        : which === "groq"
+          ? { apiKey: env.groqKey, baseURL: "https://api.groq.com/openai/v1" }
+          : { apiKey: env.grokKey, baseURL: "https://api.x.ai/v1" },
+    );
+    const [first, ...rest] = or ? env.openrouterModels : [which === "groq" ? env.groqModel : env.grokModel];
     type Msg = Record<string, unknown>;
     const msgs: Msg[] = [{ role: "system", content: SYSTEM }, ...history10.map((h) => ({ role: h.role, content: h.content })), { role: "user", content: message }];
     const tools = specs.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
@@ -393,8 +401,8 @@ export async function runBot(
 
   // Try the chosen provider first; if it fails (busy, no credit, model gone), fall back to
   // every other provider that has a key.
-  const runners = { gemini: runGemini, openrouter: runOpenRouter, openai: runOpenAI, anthropic: runAnthropic, grok: runGrok } as const;
-  const order = [...new Set([env.providers.ai, "gemini", "openrouter", "openai", "anthropic", "grok"])].filter(
+  const runners = { gemini: runGemini, openrouter: runOpenRouter, openai: runOpenAI, anthropic: runAnthropic, grok: runGrok, groq: runGroq } as const;
+  const order = [...new Set([env.providers.ai, "gemini", "groq", "openrouter", "openai", "anthropic", "grok"])].filter(
     (p): p is keyof typeof runners => p in runners && botProviderReady(p),
   );
   let lastError: unknown = new Error("No AI provider is configured");
@@ -416,5 +424,6 @@ export function botProviderReady(p: string): boolean {
   if (p === "openai") return !!env.openaiKey;
   if (p === "anthropic") return !!env.anthropicKey;
   if (p === "grok") return !!env.grokKey;
+  if (p === "groq") return !!env.groqKey;
   return false;
 }
