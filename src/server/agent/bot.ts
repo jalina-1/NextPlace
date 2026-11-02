@@ -1,5 +1,5 @@
 /**
- * NextPlace research assistant (Claude or OpenAI, server-side only).
+ * NextPlace research assistant (Claude, OpenAI or Gemini, server-side only).
  *
  * The bot can read the user's answers and accessible options, search the web, save
  * findings (each with a source link) and propose changes. It never changes the list or
@@ -10,6 +10,7 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import { GoogleGenAI, type Content } from "@google/genai";
 import { betaTool } from "@anthropic-ai/sdk/helpers/beta/json-schema";
 import { db, schema } from "../db";
 import { env } from "../env-core";
@@ -217,6 +218,59 @@ export async function runBot(
     logger.info("bot.reply", { projectId, findings, proposed: !!action, stop });
     return { reply: r, action, findings };
   };
+
+  if (env.providers.ai === "gemini") {
+    // Gemini: our tools as function declarations. Web search is a function of its own that
+    // runs a separate Google Search–grounded request and returns the text with source links.
+    const ai = new GoogleGenAI({ apiKey: env.geminiKey });
+    const model = env.geminiModel;
+    const webSearch: ToolSpec = {
+      name: "web_search",
+      description: "Search the internet (Google). Returns a short answer with the source links it came from.",
+      inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+      run: async (input) => {
+        const r = await ai.models.generateContent({
+          model,
+          contents: `Search the web and answer briefly with facts only: ${String((input as { query: string }).query).slice(0, 500)}`,
+          config: { tools: [{ googleSearch: {} }] },
+        });
+        const sources = (r.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [])
+          .map((c) => c.web)
+          .filter((w): w is { uri: string; title?: string } => !!w?.uri)
+          .map((w) => ({ title: w.title ?? "", url: w.uri }));
+        return JSON.stringify({ answer: r.text ?? "", sources });
+      },
+    };
+    const all = [...specs, webSearch];
+    const contents: Content[] = [
+      ...history10.map((h) => ({ role: h.role === "assistant" ? "model" : "user", parts: [{ text: h.content }] })),
+      { role: "user", parts: [{ text: message }] },
+    ];
+    const config = {
+      systemInstruction: SYSTEM,
+      tools: [{ functionDeclarations: all.map((t) => ({ name: t.name, description: t.description, parametersJsonSchema: t.inputSchema })) }],
+    };
+    for (let i = 0; i < 12; i++) {
+      const res = await ai.models.generateContent({ model, contents, config });
+      const calls = res.functionCalls ?? [];
+      if (!calls.length) return done((res.text ?? "").trim(), "gemini");
+      const turn = res.candidates?.[0]?.content;
+      if (turn) contents.push(turn);
+      const parts = [];
+      for (const c of calls) {
+        const spec = all.find((t) => t.name === c.name);
+        let out: string;
+        try {
+          out = spec ? await spec.run(c.args ?? {}) : "Unknown tool.";
+        } catch (e) {
+          out = `Error: ${e instanceof Error ? e.message : "tool failed"}`;
+        }
+        parts.push({ functionResponse: { id: c.id, name: c.name, response: { result: out } } });
+      }
+      contents.push({ role: "user", parts });
+    }
+    return done("", "gemini-max-iterations");
+  }
 
   if (env.providers.ai === "openai" || (deps.openai && !deps.client)) {
     // OpenAI Responses API: run our function tools in a loop; web search runs on OpenAI's side.
