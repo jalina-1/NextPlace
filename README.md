@@ -102,3 +102,5 @@ npm run dev
 ```
 
 Open `http://localhost:3000` on that same computer. Keep the terminal open. In a second terminal in the same project folder, run `npm run typecheck`, `npm run build`, and `npm test`. The browser smoke test additionally needs `npx playwright install chromium` on Windows before `node tests/browser.mjs`. Windows compatibility adjustments were made for temporary paths and startup scripts; actual Windows execution has not been tested in this Linux environment.
+
+Test deployments use the transfer-compass-vercel branch on Vercel.
