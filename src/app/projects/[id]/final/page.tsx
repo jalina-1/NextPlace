@@ -16,6 +16,18 @@ type Final = { items: string[]; excluded: string[]; revision: number; status: "e
 type Snap = { items: string[]; excluded: string[] };
 type SaveState = "saved" | "unsaved" | "saving" | "conflict" | "error";
 
+function useMediaQuery(q: string) {
+  const [m, setM] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia(q);
+    setM(mq.matches);
+    const h = () => setM(mq.matches);
+    mq.addEventListener("change", h);
+    return () => mq.removeEventListener("change", h);
+  }, [q]);
+  return m;
+}
+
 const BACKUP_KEY = (id: string) => `np-final-draft-${id}`;
 
 function Row({ id, pos, row, onMove, onMoveTo, onExclude, onPin, pinned, swapSel, onSwapSel, disabled, highlight }: {
@@ -28,12 +40,12 @@ function Row({ id, pos, row, onMove, onMoveTo, onExclude, onPin, pinned, swapSel
       <button {...attributes} {...listeners} disabled={disabled} className="cursor-grab rounded px-1 text-navy-700 hover:bg-navy-50 disabled:cursor-default" aria-label={`Drag ${row?.institution ?? "entry"}. Use space then arrow keys to move.`}>⋮⋮</button>
       <span className="tabular w-10 text-right font-semibold text-teal-800" aria-label={`Preference rank ${pos}`}>{pos}</span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-navy-900">{row?.institution ?? "Unknown"} <span className="font-normal text-navy-700">— {row?.designation}</span></p>
+        <p className="text-sm font-medium break-words text-navy-900 sm:truncate">{row?.institution ?? "Unknown"} <span className="font-normal text-navy-700">— {row?.designation}</span></p>
         <p className="text-xs text-navy-700">INDEX {row?.index ?? "—"} · {row?.district ?? "?"} · system rank {row?.systemRank ?? "—"}</p>
       </div>
       <div className="w-24 text-right"><ScoreValue score={row?.score ?? null} status={row?.status ?? "unscored"} /></div>
       {!disabled && (
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex w-full flex-wrap items-center gap-1 pl-12 sm:w-auto sm:pl-0">
           <Button size="sm" variant="ghost" aria-label="Move up" onClick={() => onMove(-1)}>↑</Button>
           <Button size="sm" variant="ghost" aria-label="Move down" onClick={() => onMove(1)}>↓</Button>
           <form onSubmit={(e) => { e.preventDefault(); if (to) onMoveTo(Number(to)); setTo(""); }} className="flex items-center gap-1">
@@ -65,6 +77,7 @@ export default function FinalPage() {
   const [swapA, setSwapA] = useState<string | null>(null);
   const [tab, setTab] = useState<"list" | "compare" | "assistant">("list");
   const [restore, setRestore] = useState<Snap | null>(null);
+  const desktop = useMediaQuery("(min-width: 1024px)");
   const revisionRef = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -314,15 +327,20 @@ export default function FinalPage() {
         {!finalized && <ButtonLink href={`/projects/${id}/export`}>Review & finalize</ButtonLink>}
       </div>
       {error && <Alert tone="error">{error}</Alert>}
-      <div className="lg:hidden">
-        <Tabs label="Editor panels" value={tab} onChange={setTab} items={[{ value: "list", label: "List" }, { value: "compare", label: "Compare" }, { value: "assistant", label: "Assistant" }]} />
-        <div className="mt-3">{tab === "list" ? listPanel : tab === "compare" ? comparePanel : assistantPanel}</div>
-      </div>
-      <div className="hidden gap-4 lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <div className="space-y-4">{comparePanel}</div>
-        <div>{listPanel}</div>
-      </div>
-      <div className="hidden lg:block">{assistantPanel}</div>
+      {!desktop ? (
+        <div>
+          <Tabs label="Editor panels" value={tab} onChange={setTab} items={[{ value: "list", label: "List" }, { value: "compare", label: "Compare" }, { value: "assistant", label: "Assistant" }]} />
+          <div className="mt-3">{tab === "list" ? listPanel : tab === "compare" ? comparePanel : assistantPanel}</div>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4">
+            <div className="space-y-4">{comparePanel}</div>
+            <div>{listPanel}</div>
+          </div>
+          {assistantPanel}
+        </>
+      )}
     </div>
   );
 }

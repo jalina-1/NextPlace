@@ -6,6 +6,7 @@ import { api, errMsg } from "@/lib/client/api";
 import { Alert, Badge, Button, ButtonLink, Card, DemoBadge, Empty, Input, PremiumBadge, ScoreValue, Select, Spinner, Tabs, cx } from "@/components/ui";
 import { Breakdown, Sources, fmtKm, fmtMin } from "@/components/Evidence";
 import type { ResultRow } from "@/lib/client/types";
+import { Assistant } from "@/components/Assistant";
 
 type Resp = {
   state: "not_analyzed" | "analyzing" | "ready";
@@ -185,6 +186,11 @@ export default function ResultsPage() {
           })}
         </ul>
       )}
+
+      <details className="rounded-xl border border-navy-100 bg-white p-4 shadow-sm">
+        <summary className="cursor-pointer font-medium text-navy-900">Ask the assistant about {data.premium ? "your options" : "your three preview options"}</summary>
+        <div className="mt-3 h-[26rem]"><Assistant projectId={id} onApplied={load} /></div>
+      </details>
 
       {!data.premium && data.hiddenCount > 0 && (
         <div className={cx("rounded-xl border-2 border-dashed border-amber-200 bg-amber-50 p-6 text-center")}>

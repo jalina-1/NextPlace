@@ -73,7 +73,9 @@ export function Assistant({ projectId, onApplied }: { projectId: string; onAppli
       setMode(r.mode);
     });
   }, [projectId]);
-  useEffect(() => end.current?.scrollIntoView({ block: "nearest" }), [msgs]);
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: "nearest" });
+  }, [msgs]);
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim()) return;

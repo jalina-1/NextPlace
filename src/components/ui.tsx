@@ -100,11 +100,13 @@ export function Field({ label, hint, error, children, htmlFor }: { label: ReactN
 }
 
 const inputCls = "w-full rounded-lg border border-navy-100 bg-white px-3 py-2 text-sm text-navy-950 placeholder:text-navy-700/50 focus:border-teal-600 focus:outline-none";
+/** Drops the default full width when the caller sets an explicit width class. */
+const widthAware = (className?: string) => (className && /(^|\s)(w-|min-w-|max-w-)/.test(className) ? inputCls.replace("w-full ", "") : inputCls);
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input({ className, ...p }, ref) {
-  return <input ref={ref} {...p} className={cx(inputCls, className)} />;
+  return <input ref={ref} {...p} className={cx(widthAware(className), className)} />;
 });
 export function Select({ className, ...p }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...p} className={cx(inputCls, "pr-8", className)} />;
+  return <select {...p} className={cx(widthAware(className), "pr-8", className)} />;
 }
 export function Textarea({ className, ...p }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...p} className={cx(inputCls, className)} />;
