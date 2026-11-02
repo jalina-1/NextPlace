@@ -822,9 +822,26 @@ function Preferences({ p, save, next, busy }: any) {
 function Import({ p, run, reload, next }: any) {
   const [table, T] = useState(0),
     [mapping, M] = useState<any>({}),
-    [edits, ED] = useState<any[]>([]);
+    [edits, ED] = useState<any[]>([]),
+    [sharedPost, SETPOST] = useState("");
   const tables = p.import?.tables || [];
   const selected = tables[table];
+  const missingRows = selected
+    ? selected.rows
+        .slice(1)
+        .map((row: any[], i: number) => ({ row, i }))
+        .filter(({ row }: any) => row.some((v: any) => v !== ""))
+        .filter(({ row, i }: any) =>
+          ["institution", "post"].some(
+            (k) =>
+              !String(
+                edits[i]?.[k] ??
+                  row[selected.rows[0].indexOf(mapping[k])] ??
+                  "",
+              ).trim(),
+          ),
+        )
+    : [];
   useEffect(() => {
     if (selected) {
       const h = selected.rows[0].map(String);
@@ -844,6 +861,7 @@ function Import({ p, run, reload, next }: any) {
         ),
       );
       ED([]);
+      SETPOST("");
     }
   }, [selected]);
   return (
@@ -917,7 +935,47 @@ function Import({ p, run, reload, next }: any) {
               ),
             )}
           </div>
+          <div className="info-panel">
+            <div>
+              <label>
+                {t.sharedPostLabel}
+                <input
+                  value={sharedPost}
+                  maxLength={200}
+                  onChange={(e) => SETPOST(e.target.value)}
+                  placeholder={t.sharedPostPlaceholder}
+                />
+              </label>
+              <p>{t.sharedPostHelp}</p>
+              <button
+                className="secondary"
+                disabled={!sharedPost.trim() || p.previewFrozen}
+                onClick={() =>
+                  ED((current) =>
+                    selected.rows.slice(1).map((row: any[], i: number) => {
+                      const post = String(
+                        current[i]?.post ??
+                          row[selected.rows[0].indexOf(mapping.post)] ??
+                          "",
+                      ).trim();
+                      return post
+                        ? current[i]
+                        : { ...current[i], post: sharedPost.trim() };
+                    }),
+                  )
+                }
+              >
+                {t.fillMissingPosts}
+              </button>
+            </div>
+          </div>
           <p className="hint">{t.ui100}</p>
+          {missingRows.length > 0 && (
+            <p className="alert" role="status">
+              {t.incompleteRows} {missingRows.length}. {t.firstIncompleteRow}{" "}
+              {missingRows[0].i + 2}.
+            </p>
+          )}
           <div className="table-scroll">
             <table>
               <thead>
@@ -958,7 +1016,7 @@ function Import({ p, run, reload, next }: any) {
           </div>
           <button
             className="primary"
-            disabled={p.previewFrozen}
+            disabled={p.previewFrozen || missingRows.length > 0}
             onClick={() =>
               run(async () => {
                 await api(`/projects/${p.id}/confirm`, "POST", {

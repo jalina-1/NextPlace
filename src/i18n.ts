@@ -3,6 +3,14 @@ import { messages } from "./messages.en";
 export const en = {
   ...messages,
   brand: "NextPlace",
+  sharedPostLabel: "Same post for missing rows (optional)",
+  sharedPostPlaceholder:
+    "Enter the post or designation from your source document",
+  sharedPostHelp:
+    "Only use this if the empty rows refer to the same post. Existing post values and original uploaded columns will not be changed. Review the filled rows before confirming.",
+  fillMissingPosts: "Fill missing posts",
+  incompleteRows: "Rows still needing institution or post:",
+  firstIncompleteRow: "First incomplete source row:",
   tagline: "A clearer path to your next posting.",
   dashboard: "My projects",
   preferences: "Preferences",

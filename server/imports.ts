@@ -159,8 +159,10 @@ export function mappedRows(table: any, mapping: any, edits?: any[]) {
     throw Error(
       "Duplicate column names: rename the columns in your source file before importing.",
     );
-  if (!mapping.institution || !mapping.post)
-    throw Error("Map institution and post.");
+  if (!mapping.institution)
+    throw Error(
+      "Map the institution column. For posts, map a column or explicitly enter values in the review table.",
+    );
   const seen = new Set();
   return table.rows
     .slice(1)

@@ -122,3 +122,37 @@ test("duplicate headers cannot silently discard original column values", () => {
     /Duplicate column/,
   );
 });
+
+test("post-less source accepts explicit user corrections while preserving originals", () => {
+  const table = {
+    name: "Vacancies",
+    rows: [
+      ["INDEX", "INSTITUTION", "DISTRICT"],
+      ["001", "Hospital A", "District A"],
+      ["002", "Hospital B", "District B"],
+    ],
+  };
+  const mapping = {
+    index: "INDEX",
+    institution: "INSTITUTION",
+    district: "DISTRICT",
+  };
+  assert.equal(
+    mappedRows(table, mapping).every((r:any) => r.invalid),
+    true,
+  );
+  const rows = mappedRows(table, mapping, [
+    { post: "User confirmed designation" },
+    { post: "User confirmed designation" },
+  ]);
+  assert.equal(
+    rows.every((r:any) => !r.invalid),
+    true,
+  );
+  assert.equal(rows[0].post, "User confirmed designation");
+  assert.deepEqual(rows[0].original, {
+    INDEX: "001",
+    INSTITUTION: "Hospital A",
+    DISTRICT: "District A",
+  });
+});
