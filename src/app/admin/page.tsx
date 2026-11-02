@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, errMsg } from "@/lib/client/api";
 import { useSession } from "@/lib/client/session";
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Tabs, Textarea } from "@/components/ui";
+import { Alert, Badge, Button, Card, Field, Input, NumberInput, Select, Spinner, Tabs, Textarea } from "@/components/ui";
 import { formatColombo } from "@/lib/dates";
 
 type Payment = { id: string; email: string; name: string; method: string; amountLkr: number; reference: string | null; paidOn: string | null; status: string; userNote: string | null; adminNote: string | null; receiptMime: string; createdAt: string; reviewedAt: string | null; accessUntil: string | null };
@@ -120,13 +120,12 @@ function SettingsPanel() {
       setMsg({ tone: "error", text: errMsg(e) });
     }
   }
-  const num = (v: string) => Number(v || 0);
   return (
     <div className="space-y-4">
       <Card title="Price & access period">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Price (LKR)" htmlFor="price"><Input id="price" type="number" value={s.priceLkr} onChange={(e) => setS({ ...s, priceLkr: num(e.target.value) })} /></Field>
-          <Field label="Access period (calendar months)" htmlFor="months"><Input id="months" type="number" min={1} max={36} value={s.accessMonths} onChange={(e) => setS({ ...s, accessMonths: num(e.target.value) })} /></Field>
+          <Field label="Price (LKR)" htmlFor="price"><NumberInput id="price" integer min={0} max={1000000} value={s.priceLkr} onValue={(n) => setS({ ...s, priceLkr: n })} /></Field>
+          <Field label="Access period (calendar months)" htmlFor="months"><NumberInput id="months" integer min={1} max={36} value={s.accessMonths} onValue={(n) => setS({ ...s, accessMonths: n })} /></Field>
         </div>
       </Card>
       <Card title="Bank instructions">
@@ -141,10 +140,10 @@ function SettingsPanel() {
       <Card title="Quotas & analysis limits">
         <div className="grid gap-3 sm:grid-cols-3">
           {Object.entries(s.quotas).map(([k, v]) => (
-            <Field key={k} label={k.replace(/([A-Z])/g, " $1").toLowerCase()} htmlFor={k}><Input id={k} type="number" value={v} onChange={(e) => setS({ ...s, quotas: { ...s.quotas, [k]: num(e.target.value) } })} /></Field>
+            <Field key={k} label={k.replace(/([A-Z])/g, " $1").toLowerCase()} htmlFor={k}><NumberInput id={k} integer min={0} max={100000} value={v} onValue={(n) => setS({ ...s, quotas: { ...s.quotas, [k]: n } })} /></Field>
           ))}
-          <Field label="worker concurrency" htmlFor="conc"><Input id="conc" type="number" value={s.jobs.concurrency} onChange={(e) => setS({ ...s, jobs: { ...s.jobs, concurrency: num(e.target.value) } })} /></Field>
-          <Field label="max attempts per job" htmlFor="att"><Input id="att" type="number" value={s.jobs.maxAttempts} onChange={(e) => setS({ ...s, jobs: { ...s.jobs, maxAttempts: num(e.target.value) } })} /></Field>
+          <Field label="worker concurrency" htmlFor="conc"><NumberInput id="conc" integer min={1} max={16} value={s.jobs.concurrency} onValue={(n) => setS({ ...s, jobs: { ...s.jobs, concurrency: n } })} /></Field>
+          <Field label="max attempts per job" htmlFor="att"><NumberInput id="att" integer min={1} max={10} value={s.jobs.maxAttempts} onValue={(n) => setS({ ...s, jobs: { ...s.jobs, maxAttempts: n } })} /></Field>
         </div>
       </Card>
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}

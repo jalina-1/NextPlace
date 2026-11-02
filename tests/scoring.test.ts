@@ -170,3 +170,15 @@ describe("calendar months in Asia/Colombo", () => {
     expect(addCalendarMonthsColombo(start, 1).toISOString()).toBe("2027-02-28T20:00:00.000Z"); // 01:30 on 1 Mar Colombo
   });
 });
+
+describe("threshold validation", () => {
+  it("rejects ideal values that are not below the maximum", async () => {
+    const { validateThresholds } = await import("@/lib/preferences");
+    const p = defaultPreferences();
+    expect(validateThresholds(p)).toEqual([]);
+    p.travel = { idealMinutes: 0, maxMinutes: 0, idealKm: 60, maxKm: 250 };
+    expect(validateThresholds(p).map((i) => i.code)).toEqual(["travel_minutes"]);
+    p.travel = { idealMinutes: 30, maxMinutes: 120, idealKm: 300, maxKm: 250 };
+    expect(validateThresholds(p).map((i) => i.code)).toEqual(["travel_km"]);
+  });
+});

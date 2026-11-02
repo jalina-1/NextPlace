@@ -1,5 +1,5 @@
 "use client";
-import { Alert, Button, Input, cx } from "./ui";
+import { Alert, Button, NumberInput, cx } from "./ui";
 import { CRITERIA, normalizeWeights, validateWeights, type CriterionKey, type Preferences } from "@/lib/preferences";
 
 export const CRIT_LABEL: Record<CriterionKey, { label: string; help: string }> = {
@@ -37,15 +37,14 @@ export function WeightsEditor({ criteria, onChange }: { criteria: Preferences["c
                 onChange={(e) => onChange({ ...criteria, [c]: { ...criteria[c], weight: Number(e.target.value) } })}
                 className="w-32 accent-teal-700 sm:w-48"
               />
-              <Input
-                type="number"
+              <NumberInput
                 min={0}
                 max={100}
-                step={0.5}
+                step={0.01}
                 aria-label={`${CRIT_LABEL[c].label} weight percent`}
                 disabled={!criteria[c].enabled}
                 value={criteria[c].weight}
-                onChange={(e) => onChange({ ...criteria, [c]: { ...criteria[c], weight: Number(e.target.value) } })}
+                onValue={(n) => onChange({ ...criteria, [c]: { ...criteria[c], weight: n } })}
                 className="w-20 text-right tabular"
               />
               <span className="text-sm">%</span>

@@ -169,6 +169,18 @@ export function normalizeWeights(criteria: Preferences["criteria"]): Preferences
   return out;
 }
 
+/** Threshold consistency: each "ideal" must be below its "maximum" (otherwise the score scale collapses). */
+export function validateThresholds(p: Pick<Preferences, "travel" | "postScoring">): WeightIssue[] {
+  const issues: WeightIssue[] = [];
+  if (p.travel.idealMinutes >= p.travel.maxMinutes)
+    issues.push({ code: "travel_minutes", message: `Ideal travel time (${p.travel.idealMinutes} min) must be less than the maximum travel time (${p.travel.maxMinutes} min).` });
+  if (p.travel.idealKm >= p.travel.maxKm)
+    issues.push({ code: "travel_km", message: `Ideal road distance (${p.travel.idealKm} km) must be less than the maximum road distance (${p.travel.maxKm} km).` });
+  if (p.postScoring.floor > p.postScoring.firstChoice)
+    issues.push({ code: "post_floor", message: "The lowest matched post score cannot be higher than the 1st choice score." });
+  return issues;
+}
+
 export function round2(n: number) {
   return Math.round(n * 100) / 100;
 }

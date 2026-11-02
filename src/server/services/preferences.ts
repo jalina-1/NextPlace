@@ -3,7 +3,7 @@ import { db, schema } from "../db";
 import { errors } from "../http";
 import type { CurrentUser } from "../session";
 import { getOwnedProject, touchProject } from "./projects";
-import { parsePreferences, preferencesSchema, validateWeights, type Preferences } from "@/lib/preferences";
+import { parsePreferences, preferencesSchema, validateThresholds, validateWeights, type Preferences } from "@/lib/preferences";
 import { recomputeScores } from "./scores";
 import { audit } from "./audit";
 
@@ -20,7 +20,7 @@ export async function getPreferences(projectId: string, user: CurrentUser) {
 export async function savePreferences(projectId: string, user: CurrentUser, raw: unknown, expectedRevision?: number) {
   await getOwnedProject(projectId, user);
   const prefs: Preferences = preferencesSchema.parse(raw);
-  const issues = validateWeights(prefs.criteria);
+  const issues = [...validateThresholds(prefs), ...validateWeights(prefs.criteria)];
   if (issues.length) throw errors.bad(issues.map((i) => i.message).join(" "), { issues });
   const res = await db
     .update(schema.preference)

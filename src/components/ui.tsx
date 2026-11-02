@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { forwardRef, useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
@@ -187,5 +187,77 @@ export function ScoreValue({ score, status }: { score: number | null; status: st
       <span className="tabular text-base font-semibold text-navy-950">{score.toFixed(1)}</span>
       {status !== "complete" && status !== "excluded" && <span className="text-xs text-amber-800">{status === "low_coverage" ? "low evidence" : "provisional"}</span>}
     </span>
+  );
+}
+
+/**
+ * Numeric input that keeps the text the user is typing (empty, "1.", "0.5" …) instead of
+ * forcing it to a number on every keystroke. Valid in-range values are reported immediately;
+ * on blur an empty or out-of-range entry is clamped (or restored) and shown.
+ */
+export function NumberInput({
+  value,
+  onValue,
+  min,
+  max,
+  step = 1,
+  integer,
+  className,
+  ...p
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type" | "min" | "max" | "step"> & {
+  value: number;
+  onValue: (n: number) => void;
+  min: number;
+  max: number;
+  step?: number;
+  integer?: boolean;
+}) {
+  const [text, setText] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused && Number(text) !== value) setText(String(value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, focused]);
+  const parse = (t: string) => {
+    if (t.trim() === "" || !/^\d*\.?\d*$/.test(t.trim())) return null;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : null;
+  };
+  const n = parse(text);
+  const invalid = n == null || n < min || n > max || (integer && !Number.isInteger(n));
+  return (
+    <>
+      <Input
+        {...p}
+        type="text"
+        inputMode={integer ? "numeric" : "decimal"}
+        value={text}
+        aria-invalid={focused && invalid ? true : undefined}
+        className={cx(className, focused && invalid && "border-red-400")}
+        onFocus={() => setFocused(true)}
+        onChange={(e) => {
+          // Drop leading zeros ("050" → "50") but keep "0" and "0.5".
+          const t = e.target.value.replace(",", ".").replace(/^0+(?=\d)/, "");
+          if (t !== "" && !/^\d*\.?\d*$/.test(t)) return;
+          setText(t);
+          const v = parse(t);
+          if (v != null && v >= min && v <= max && (!integer || Number.isInteger(v))) onValue(v);
+        }}
+        onBlur={() => {
+          setFocused(false);
+          let v = parse(text);
+          if (v == null) v = value;
+          v = Math.min(max, Math.max(min, integer ? Math.round(v) : Math.round(v / step) * step));
+          v = Math.round(v * 100) / 100;
+          setText(String(v));
+          if (v !== value) onValue(v);
+        }}
+      />
+      {focused && invalid && (
+        <span className="mt-1 block text-xs text-red-700" role="alert">
+          Enter a number from {min} to {max}.
+        </span>
+      )}
+    </>
   );
 }

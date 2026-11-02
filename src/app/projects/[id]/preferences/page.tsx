@@ -2,13 +2,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, errMsg } from "@/lib/client/api";
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Textarea, cx } from "@/components/ui";
+import { Alert, Badge, Button, Card, Field, Input, NumberInput, Select, Spinner, Textarea, cx } from "@/components/ui";
 import { CRITERIA, normalizeWeights, TRAVEL_DEFAULTS, validateWeights, type CriterionKey, type Preferences, type Place } from "@/lib/preferences";
 import { DISTRICT_TOWNS, DISTRICTS } from "@/lib/places";
 import { FACILITY_TARGETS } from "@/lib/scoring";
 import { WeightsEditor } from "@/components/WeightsEditor";
+import { validateThresholds } from "@/lib/preferences";
 
-const STEPS = ["Home & travel", "Posts", "Places", "Climate & facilities", "Requirements", "Weights"] as const;
+const STEPS = ["Home & travel", "Posts", "Places", "Climate & facilities", "Strict rules (optional)", "Weights"] as const;
 
 
 function ListEditor({ label, values, onChange, placeholder, ordered, suggestions, id }: { label: string; values: string[]; onChange: (v: string[]) => void; placeholder: string; ordered?: boolean; suggestions?: string[]; id: string }) {
@@ -197,11 +198,14 @@ export default function PreferencesPage() {
               </div>
               <fieldset className="grid gap-4 sm:grid-cols-2">
                 <legend className="mb-2 text-sm font-medium">Travel score thresholds (visible and editable)</legend>
-                <Field label="Ideal travel time (minutes) — scores 100" htmlFor="im"><Input id="im" type="number" min={0} value={prefs.travel.idealMinutes} onChange={(e) => set("travel", { ...prefs.travel, idealMinutes: Number(e.target.value) })} /></Field>
-                <Field label="Maximum travel time (minutes) — scores 0" htmlFor="mm"><Input id="mm" type="number" min={1} value={prefs.travel.maxMinutes} onChange={(e) => set("travel", { ...prefs.travel, maxMinutes: Number(e.target.value) })} /></Field>
-                <Field label="Ideal road distance (km)" htmlFor="ik" hint="Used only when travel time is unknown."><Input id="ik" type="number" min={0} value={prefs.travel.idealKm} onChange={(e) => set("travel", { ...prefs.travel, idealKm: Number(e.target.value) })} /></Field>
-                <Field label="Maximum road distance (km)" htmlFor="mk"><Input id="mk" type="number" min={1} value={prefs.travel.maxKm} onChange={(e) => set("travel", { ...prefs.travel, maxKm: Number(e.target.value) })} /></Field>
+                <Field label="Ideal travel time (minutes) — scores 100" htmlFor="im"><NumberInput id="im" min={0} max={1440} integer value={prefs.travel.idealMinutes} onValue={(n) => set("travel", { ...prefs.travel, idealMinutes: n })} /></Field>
+                <Field label="Maximum travel time (minutes) — scores 0" htmlFor="mm"><NumberInput id="mm" min={1} max={1440} integer value={prefs.travel.maxMinutes} onValue={(n) => set("travel", { ...prefs.travel, maxMinutes: n })} /></Field>
+                <Field label="Ideal road distance (km)" htmlFor="ik" hint="Used only when travel time is unknown."><NumberInput id="ik" min={0} max={1000} value={prefs.travel.idealKm} onValue={(n) => set("travel", { ...prefs.travel, idealKm: n })} /></Field>
+                <Field label="Maximum road distance (km)" htmlFor="mk"><NumberInput id="mk" min={1} max={1000} value={prefs.travel.maxKm} onValue={(n) => set("travel", { ...prefs.travel, maxKm: n })} /></Field>
               </fieldset>
+              {validateThresholds(prefs).filter((i) => i.code.startsWith("travel")).length > 0 && (
+                <Alert tone="warning">{validateThresholds(prefs).filter((i) => i.code.startsWith("travel")).map((i) => <p key={i.code}>{i.message}</p>)}</Alert>
+              )}
               <PlacePicker id="second" label="Optional second reference location (e.g. a partner's workplace)" value={prefs.secondLocation} onChange={(p) => set("secondLocation", p)} />
               {prefs.secondLocation && (
                 <Field label={`Share of the travel score from the second location: ${prefs.secondLocationShare}%`} htmlFor="share">
@@ -214,14 +218,36 @@ export default function PreferencesPage() {
             <>
               <ListEditor id="posts" ordered label="Preferred posts, designations, specialties or units (most preferred first)" placeholder="e.g. Medical Officer - OPD" values={prefs.posts} onChange={(v) => set("posts", v)} />
               <p className="text-sm text-navy-700">
-                A designation matches when it contains your text. Post #k scores max({prefs.postScoring.floor}, {prefs.postScoring.firstChoice} − {prefs.postScoring.stepDown} × (k−1)); non-matching posts score {prefs.postScoring.unmatched}. NextPlace never decides eligibility from a job title — you choose which options to consider in the import review.
+                Add the posts you want, best first. A vacancy matches a post when its designation contains the words you typed (for example “OPD” matches “Medical Officer - OPD”).
               </p>
-              <div className="grid gap-3 sm:grid-cols-4">
-                <Field label="1st choice score" htmlFor="ps1"><Input id="ps1" type="number" value={prefs.postScoring.firstChoice} onChange={(e) => set("postScoring", { ...prefs.postScoring, firstChoice: Number(e.target.value) })} /></Field>
-                <Field label="Step down per rank" htmlFor="ps2"><Input id="ps2" type="number" value={prefs.postScoring.stepDown} onChange={(e) => set("postScoring", { ...prefs.postScoring, stepDown: Number(e.target.value) })} /></Field>
-                <Field label="Lowest matched score" htmlFor="ps3"><Input id="ps3" type="number" value={prefs.postScoring.floor} onChange={(e) => set("postScoring", { ...prefs.postScoring, floor: Number(e.target.value) })} /></Field>
-                <Field label="Non-matching score" htmlFor="ps4"><Input id="ps4" type="number" value={prefs.postScoring.unmatched} onChange={(e) => set("postScoring", { ...prefs.postScoring, unmatched: Number(e.target.value) })} /></Field>
-              </div>
+              {prefs.posts.length > 0 && (
+                <div className="rounded-lg border border-teal-100 bg-teal-50 p-3">
+                  <p className="mb-2 text-sm font-medium text-navy-900">Points each post gets (out of 100)</p>
+                  <ul className="space-y-1 text-sm">
+                    {prefs.posts.map((p, i) => (
+                      <li key={p} className="flex justify-between gap-3">
+                        <span>{i + 1}. {p}</span>
+                        <span className="tabular font-semibold text-teal-800">{Math.max(prefs.postScoring.floor, prefs.postScoring.firstChoice - prefs.postScoring.stepDown * i)}</span>
+                      </li>
+                    ))}
+                    <li className="flex justify-between gap-3 border-t border-teal-100 pt-1 text-navy-700">
+                      <span>Any other post</span>
+                      <span className="tabular font-semibold">{prefs.postScoring.unmatched}</span>
+                    </li>
+                  </ul>
+                  <p className="mt-2 text-xs text-navy-700">These points are then multiplied by the “Post preference” weight in step 6. NextPlace never decides whether you are eligible for a post; you choose which vacancies to consider in the import review.</p>
+                </div>
+              )}
+              <details className="rounded-lg border border-navy-100 p-3">
+                <summary className="cursor-pointer text-sm font-medium text-navy-900">Advanced: change how many points each choice gets</summary>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <Field label="Points for your 1st choice" htmlFor="ps1"><NumberInput id="ps1" min={0} max={100} value={prefs.postScoring.firstChoice} onValue={(n) => set("postScoring", { ...prefs.postScoring, firstChoice: n })} /></Field>
+                  <Field label="Points lost per lower choice" htmlFor="ps2" hint="e.g. 15: 1st 100, 2nd 85, 3rd 70"><NumberInput id="ps2" min={0} max={50} value={prefs.postScoring.stepDown} onValue={(n) => set("postScoring", { ...prefs.postScoring, stepDown: n })} /></Field>
+                  <Field label="Minimum points for a listed post" htmlFor="ps3"><NumberInput id="ps3" min={0} max={100} value={prefs.postScoring.floor} onValue={(n) => set("postScoring", { ...prefs.postScoring, floor: n })} /></Field>
+                  <Field label="Points for any other post" htmlFor="ps4"><NumberInput id="ps4" min={0} max={100} value={prefs.postScoring.unmatched} onValue={(n) => set("postScoring", { ...prefs.postScoring, unmatched: n })} /></Field>
+                </div>
+                {validateThresholds(prefs).filter((i) => i.code === "post_floor").map((i) => <p key={i.code} className="mt-2 text-xs text-red-700">{i.message}</p>)}
+              </details>
             </>
           )}
           {step === 2 && (
@@ -263,7 +289,7 @@ export default function PreferencesPage() {
                 <Importance id="f-h" label={`Shops & supermarkets (target ${FACILITY_TARGETS.shops})`} value={prefs.facilities.shops} onChange={(n) => set("facilities", { ...prefs.facilities, shops: n })} />
                 <Importance id="f-p" label={`Pharmacies (target ${FACILITY_TARGETS.pharmacies})`} value={prefs.facilities.pharmacies} onChange={(n) => set("facilities", { ...prefs.facilities, pharmacies: n })} />
                 <Importance id="f-b" label={`Banks (target ${FACILITY_TARGETS.banks})`} value={prefs.facilities.banks} onChange={(n) => set("facilities", { ...prefs.facilities, banks: n })} />
-                <Field label="Search radius (km)" htmlFor="rad"><Input id="rad" type="number" min={1} max={25} value={prefs.facilities.radiusKm} onChange={(e) => set("facilities", { ...prefs.facilities, radiusKm: Number(e.target.value) })} /></Field>
+                <Field label="Search radius (km)" htmlFor="rad"><NumberInput id="rad" min={1} max={25} value={prefs.facilities.radiusKm} onValue={(n) => set("facilities", { ...prefs.facilities, radiusKm: n })} /></Field>
               </div>
               <p className="text-xs text-navy-700">Facility counts are availability within a radius; they say nothing about school admission eligibility or quality.</p>
               <fieldset className="space-y-2">
@@ -275,15 +301,60 @@ export default function PreferencesPage() {
             </>
           )}
           {step === 4 && (
-            <div className="space-y-3">
-              <p className="text-sm text-navy-700">Mandatory requirements exclude options that clearly fail them. When the data needed to check a requirement is unknown, the option is kept and flagged instead.</p>
-              <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={prefs.mandatory.maxTravelTime} onChange={(e) => set("mandatory", { ...prefs.mandatory, maxTravelTime: e.target.checked })} /> Exclude options whose estimated travel time exceeds {prefs.travel.maxMinutes} minutes</label>
-              <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={prefs.mandatory.preferredPostsOnly} onChange={(e) => set("mandatory", { ...prefs.mandatory, preferredPostsOnly: e.target.checked })} /> Only consider my preferred posts</label>
-              <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={prefs.mandatory.preferredDistrictsOnly} onChange={(e) => set("mandatory", { ...prefs.mandatory, preferredDistrictsOnly: e.target.checked })} /> Only consider my preferred districts</label>
-              <Field label={`Minimum evidence coverage for confident ranking: ${prefs.minConfidentCoverage}%`} htmlFor="cov" hint="Options below this are marked low-evidence and ranked after better-evidenced options.">
-                <input id="cov" type="range" min={0} max={100} value={prefs.minConfidentCoverage} onChange={(e) => set("minConfidentCoverage", Number(e.target.value))} className="w-full accent-teal-700" />
+            <div className="space-y-5">
+              <div className="rounded-lg bg-navy-50 p-3 text-sm text-navy-800">
+                <p className="font-medium text-navy-900">These are optional. Leave them all unticked if you are not sure.</p>
+                <p className="mt-1">Tick a rule only if you never want an option that breaks it. Those options are not deleted: they move to an “Excluded” list on the results page, where you can still see them. If we don’t have the information to check a rule (for example, the travel time is unknown), the option stays in your list with a warning.</p>
+              </div>
+
+              <fieldset className="space-y-3">
+                <legend className="mb-1 text-sm font-semibold text-navy-900">Strict rules</legend>
+                <label className="flex items-start gap-3 rounded-lg border border-navy-100 p-3 text-sm">
+                  <input type="checkbox" className="mt-1" disabled={!(prefs.travel.maxMinutes > prefs.travel.idealMinutes)} checked={prefs.mandatory.maxTravelTime} onChange={(e) => set("mandatory", { ...prefs.mandatory, maxTravelTime: e.target.checked })} />
+                  <span>
+                    <span className="block font-medium text-navy-900">Hide places that are too far to travel</span>
+                    <span className="block text-navy-700">
+                      {prefs.travel.maxMinutes > prefs.travel.idealMinutes
+                        ? `Options whose estimated travel time from your home is more than ${prefs.travel.maxMinutes} minutes are excluded. You set this limit in step 1 (Home & travel).`
+                        : "First set a valid maximum travel time in step 1 (Home & travel)."}
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 rounded-lg border border-navy-100 p-3 text-sm">
+                  <input type="checkbox" className="mt-1" disabled={prefs.posts.length === 0} checked={prefs.mandatory.preferredPostsOnly} onChange={(e) => set("mandatory", { ...prefs.mandatory, preferredPostsOnly: e.target.checked })} />
+                  <span>
+                    <span className="block font-medium text-navy-900">Show only the posts I listed</span>
+                    <span className="block text-navy-700">
+                      {prefs.posts.length
+                        ? `Vacancies that don’t match any of your ${prefs.posts.length} listed post(s) in step 2 are excluded.`
+                        : "Add your preferred posts in step 2 first."}
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 rounded-lg border border-navy-100 p-3 text-sm">
+                  <input type="checkbox" className="mt-1" disabled={prefs.preferredDistricts.length === 0} checked={prefs.mandatory.preferredDistrictsOnly} onChange={(e) => set("mandatory", { ...prefs.mandatory, preferredDistrictsOnly: e.target.checked })} />
+                  <span>
+                    <span className="block font-medium text-navy-900">Show only the districts I prefer</span>
+                    <span className="block text-navy-700">
+                      {prefs.preferredDistricts.length
+                        ? `Only vacancies in ${prefs.preferredDistricts.join(", ")} are kept.`
+                        : "Add preferred districts in step 3 (Places) first."}
+                    </span>
+                  </span>
+                </label>
+              </fieldset>
+
+              <div className="space-y-2">
+                <label htmlFor="cov" className="block text-sm font-semibold text-navy-900">How much information is needed to trust a score? <span className="tabular text-teal-800">{prefs.minConfidentCoverage}%</span></label>
+                <input id="cov" type="range" min={0} max={100} step={5} value={prefs.minConfidentCoverage} onChange={(e) => set("minConfidentCoverage", Number(e.target.value))} className="w-full accent-teal-700" />
+                <p className="text-sm text-navy-700">
+                  Sometimes we can’t find every piece of information for a place (for example, climate data is missing). If we found information for less than {prefs.minConfidentCoverage}% of what matters to you, that option is labelled “Low evidence” and placed below options we know more about, so a guess never beats a well-researched option. Most people can leave this at 60%.
+                </p>
+              </div>
+
+              <Field label="Notes for yourself (optional)" htmlFor="notes" hint="Only you can see this. It does not change any scores.">
+                <Textarea id="notes" rows={3} maxLength={1000} value={prefs.notes} onChange={(e) => set("notes", e.target.value)} />
               </Field>
-              <Field label="Other notes (for yourself)" htmlFor="notes"><Textarea id="notes" rows={3} maxLength={1000} value={prefs.notes} onChange={(e) => set("notes", e.target.value)} /></Field>
             </div>
           )}
           {step === 5 && <WeightsEditor criteria={prefs.criteria} onChange={(c) => set("criteria", c)} />}
