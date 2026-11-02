@@ -65,7 +65,7 @@ export const env = {
         | "overpass"
         | "demo",
       // The research bot is not connected by default; the chat panel shows "coming soon".
-      ai: (pick("AI_PROVIDER") ?? (pick("OPENROUTER_API_KEY") ? "openrouter" : pick("OPENAI_API_KEY") ? "openai" : pick("GEMINI_API_KEY") ? "gemini" : pick("ANTHROPIC_API_KEY") ? "anthropic" : "off")) as "openrouter" | "openai" | "gemini" | "anthropic" | "demo" | "off",
+      ai: (pick("AI_PROVIDER") ?? (pick("OPENROUTER_API_KEY") ? "openrouter" : pick("OPENAI_API_KEY") ? "openai" : pick("GEMINI_API_KEY") ? "gemini" : pick("ANTHROPIC_API_KEY") ? "anthropic" : "off")) as "grok" | "openrouter" | "openai" | "gemini" | "anthropic" | "demo" | "off",
       ocr: (pick("OCR_PROVIDER") ?? (pick("GOOGLE_VISION_API_KEY") ? "google-vision" : pick("OCR_SPACE_API_KEY") ? "ocr-space" : "off")) as
         | "google-vision"
         | "ocr-space"
@@ -84,6 +84,12 @@ export const env = {
   },
   get openaiModel() {
     return pick("OPENAI_MODEL") ?? "gpt-5-mini";
+  },
+  get grokKey() {
+    return pick("XAI_API_KEY");
+  },
+  get grokModel() {
+    return pick("GROK_MODEL") ?? "grok-4";
   },
   get openrouterKey() {
     return pick("OPENROUTER_API_KEY");

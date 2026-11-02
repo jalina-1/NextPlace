@@ -38,7 +38,7 @@ type Ctx = Awaited<ReturnType<typeof buildContext>>;
 
 export function assistantMode(): "live" | "demo" | "unavailable" {
   const p = env.providers.ai;
-  if (p !== "off" && p !== "demo" && ["gemini", "openrouter", "openai", "anthropic"].some(botProviderReady)) return "live";
+  if (p !== "off" && p !== "demo" && ["gemini", "openrouter", "openai", "anthropic", "grok"].some(botProviderReady)) return "live";
   if (p === "off") return "unavailable";
   return "demo";
 }

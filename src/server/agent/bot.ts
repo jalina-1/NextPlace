@@ -347,11 +347,16 @@ export async function runBot(
   return done(textOf(final), String(final.stop_reason));
   };
 
-  const runOpenRouter = async () => {
+  // OpenAI-compatible chat APIs (OpenRouter, xAI Grok) share one tool loop.
+  const runOpenRouter = () => runChat("openrouter");
+  const runGrok = () => runChat("grok");
+  const runChat = async (which: "openrouter" | "grok") => {
     // OpenRouter: one key, many models. OPENROUTER_MODELS is a comma list tried in order by
     // OpenRouter itself; the "web" plugin adds internet search results with source links.
-    const client = new OpenAI({ apiKey: env.openrouterKey, baseURL: "https://openrouter.ai/api/v1" });
-    const [first, ...rest] = env.openrouterModels;
+    // Grok (xAI) runs without web search here.
+    const or = which === "openrouter";
+    const client = new OpenAI(or ? { apiKey: env.openrouterKey, baseURL: "https://openrouter.ai/api/v1" } : { apiKey: env.grokKey, baseURL: "https://api.x.ai/v1" });
+    const [first, ...rest] = or ? env.openrouterModels : [env.grokModel];
     type Msg = Record<string, unknown>;
     const msgs: Msg[] = [{ role: "system", content: SYSTEM }, ...history10.map((h) => ({ role: h.role, content: h.content })), { role: "user", content: message }];
     const tools = specs.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
@@ -359,14 +364,14 @@ export async function runBot(
       const res = (await client.chat.completions.create({
         model: first,
         ...(rest.length ? { models: rest } : {}),
-        ...(i === 0 ? { plugins: [{ id: "web", max_results: 3 }] } : {}),
+        ...(or && i === 0 ? { plugins: [{ id: "web", max_results: 3 }] } : {}),
         messages: msgs,
         tools,
       } as never)) as unknown as { choices: { message: Msg & { content?: string | null; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[] };
       const m = res.choices?.[0]?.message;
-      if (!m) throw new Error("OpenRouter returned no answer");
+      if (!m) throw new Error(`${which} returned no answer`);
       const calls = m.tool_calls ?? [];
-      if (!calls.length) return done((m.content ?? "").trim(), "openrouter");
+      if (!calls.length) return done((m.content ?? "").trim(), which);
       msgs.push(m);
       for (const c of calls) {
         const spec = specs.find((t) => t.name === c.function.name);
@@ -379,7 +384,7 @@ export async function runBot(
         msgs.push({ role: "tool", tool_call_id: c.id, content: out });
       }
     }
-    return done("", "openrouter-max-iterations");
+    return done("", `${which}-max-iterations`);
   };
 
   // Tests inject a client for one provider.
@@ -388,8 +393,8 @@ export async function runBot(
 
   // Try the chosen provider first; if it fails (busy, no credit, model gone), fall back to
   // every other provider that has a key.
-  const runners = { gemini: runGemini, openrouter: runOpenRouter, openai: runOpenAI, anthropic: runAnthropic } as const;
-  const order = [...new Set([env.providers.ai, "gemini", "openrouter", "openai", "anthropic"])].filter(
+  const runners = { gemini: runGemini, openrouter: runOpenRouter, openai: runOpenAI, anthropic: runAnthropic, grok: runGrok } as const;
+  const order = [...new Set([env.providers.ai, "gemini", "openrouter", "openai", "anthropic", "grok"])].filter(
     (p): p is keyof typeof runners => p in runners && botProviderReady(p),
   );
   let lastError: unknown = new Error("No AI provider is configured");
@@ -410,5 +415,6 @@ export function botProviderReady(p: string): boolean {
   if (p === "openrouter") return !!env.openrouterKey;
   if (p === "openai") return !!env.openaiKey;
   if (p === "anthropic") return !!env.anthropicKey;
+  if (p === "grok") return !!env.grokKey;
   return false;
 }
