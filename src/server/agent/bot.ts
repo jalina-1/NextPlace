@@ -209,15 +209,18 @@ export async function runBot(
   const client = deps.client ?? new Anthropic({ apiKey: env.anthropicKey });
   const messages: Anthropic.Beta.BetaMessageParam[] = [...history.slice(-10).map((h) => ({ role: h.role, content: h.content })), { role: "user", content: message }];
 
+  const model = env.anthropicModel;
+  // Server-side refusal fallbacks and the newer web search tool exist only on some models
+  // (not on Haiku); cheaper models get the basic web search variant and no fallbacks.
+  const fullFeatures = /^claude-(opus-5|sonnet-5-5|fable-5)/.test(model);
   const final = await client.beta.messages.toolRunner({
-    model: env.anthropicModel,
+    model,
     max_tokens: 8000,
     max_iterations: 12,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
+    ...(fullFeatures ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
     output_config: { effort: "medium" },
     system: SYSTEM,
-    tools: [...tools, { type: "web_search_20260209", name: "web_search", max_uses: 5 }],
+    tools: [...tools, fullFeatures ? { type: "web_search_20260209" as const, name: "web_search" as const, max_uses: 5 } : { type: "web_search_20250305" as const, name: "web_search" as const, max_uses: 5 }],
     messages,
   });
 
