@@ -64,7 +64,7 @@ function App() {
     [error, E] = useState(""),
     [notice, N] = useState(""),
     [busy, B] = useState(false),
-    [pub, PUB] = useState<any>({ price: 5000 }),
+    [pub, PUB] = useState<any>({}),
     [mobile, M] = useState(false);
   const run = async (fn: () => Promise<any>) => {
     B(true);
@@ -135,7 +135,7 @@ function App() {
           <Brand />
           <nav>
             <button onClick={() => A("landing")}>{t.ui001}</button>
-            <button onClick={() => A("pricing")}>{t.ui002}</button>
+
             <button onClick={() => A("login")}>{t.ui003}</button>
             <button className="primary" onClick={() => A("register")}>
               {t.ui004}
@@ -211,23 +211,6 @@ function App() {
                   <p>{s}</p>
                 </article>
               ))}
-            </section>
-            <section className="pricing">
-              <div>
-                <span className="eyebrow">{t.ui015}</span>
-                <h2>{t.ui016}</h2>
-                <p>{t.ui017}</p>
-              </div>
-              <div>
-                <strong>
-                  {t.ui018}
-                  {pub.price.toLocaleString()}
-                </strong>
-                <p>{t.ui019}</p>
-                <button className="primary" onClick={() => A("register")}>
-                  {t.ui020}
-                </button>
-              </div>
             </section>
             <footer>{t.disclaimer}</footer>
           </>
@@ -521,7 +504,7 @@ function App() {
               </div>
             </>
           ) : page === "payment" ? (
-            <Payments user={user} pub={pub} run={run} />
+            <Payments user={user} run={run} />
           ) : page === "admin" ? (
             <Admin run={run} />
           ) : page === "account" ? (
@@ -623,8 +606,7 @@ function Brand() {
         <Compass size={25} />
       </span>
       <div>
-        {t.ui064}
-        <span className="brand-light">{t.ui065}</span>
+        {t.brand}
         <small>{t.ui066}</small>
       </div>
     </div>
@@ -1343,11 +1325,27 @@ function Results({ p, compare, user, run, reload, next }: any) {
     </>
   );
 }
-function Payments({ user, pub, run }: any) {
+function Payments({ user, run }: any) {
+  const [pub, PUB] = useState<any>(null);
+  const [pricingError, PE] = useState("");
   const [payments, P] = useState<any[]>([]);
   useEffect(() => {
     api("/payments").then(P);
+    api("/pricing")
+      .then(PUB)
+      .catch((e) => PE(e.message));
   }, []);
+  if (!pub)
+    return (
+      <section className="panel">
+        <h2>Complete your preview first</h2>
+        <p>{pricingError || "Loading access details…"}</p>
+        <p>
+          Save your preferences, confirm your vacancy list, and finish analysis
+          to view payment details.
+        </p>
+      </section>
+    );
   return (
     <>
       <PageTitle eyebrow={t.ui140} title={t.ui141} text={t.ui142} />

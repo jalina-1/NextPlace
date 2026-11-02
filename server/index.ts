@@ -14,7 +14,7 @@ import {
   preferencesSchema,
   rank,
   validOrder,
-  addMonth,
+  addYear,
   safeCell,
 } from "./domain.ts";
 import { putPrivate, getPrivate, deletePrivate } from "./storage.ts";
@@ -248,7 +248,7 @@ app.post(
               ? { from: process.env.EMAIL_FROM }
               : {}),
             to: email,
-            subject: "Reset Transfer Compass password",
+            subject: "Reset NextPlace password",
             text: `Reset token (expires in 30 minutes): ${token}`,
           }),
         },
@@ -283,7 +283,24 @@ app.get(
   "/api/public",
   wrap(async (_req: any, res: any) => {
     const s = await settings();
-    res.json({ price: s.price, bank: s.bank });
+    res.json({ name: "NextPlace" });
+  }),
+);
+app.get(
+  "/api/pricing",
+  wrap(async (req: any, res: any) => {
+    const projects = await query("SELECT data FROM projects WHERE user_id=$1", [
+      req.user.id,
+    ]);
+    if (!projects.some((p) => p.data.previewFrozen))
+      return res
+        .status(403)
+        .json({
+          error:
+            "Complete your initial analysis and free preview before viewing payment details.",
+        });
+    const s = await settings();
+    res.json({ price: s.price, bank: s.bank, period: "year" });
   }),
 );
 app.get(
@@ -872,7 +889,7 @@ app.post(
           u.premium_until && new Date(u.premium_until) > new Date()
             ? new Date(u.premium_until)
             : new Date();
-        const end = addMonth(start);
+        const end = addYear(start);
         await q(
           "INSERT INTO access_grants(payment_id,user_id,starts_at,ends_at) VALUES($1,$2,$3,$4)",
           [p.id, u.id, start.toISOString(), end.toISOString()],
@@ -946,7 +963,5 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 });
 if (process.env.NO_LISTEN !== "1" && !process.env.VERCEL)
   app.listen(Number(process.env.PORT || 3000), "0.0.0.0", () =>
-    console.log(
-      "Transfer Compass listening on port " + (process.env.PORT || 3000),
-    ),
+    console.log("NextPlace listening on port " + (process.env.PORT || 3000)),
   );

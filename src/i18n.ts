@@ -2,7 +2,7 @@ import { messages } from "./messages.en";
 // English catalog. Add Sinhala/Tamil catalogs with the same keys when translations are available.
 export const en = {
   ...messages,
-  brand: "Transfer Compass",
+  brand: "NextPlace",
   tagline: "A clearer path to your next posting.",
   dashboard: "My projects",
   preferences: "Preferences",

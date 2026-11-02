@@ -6,7 +6,7 @@ import {
   score,
   rank,
   validOrder,
-  addMonth,
+  addYear,
   safeCell,
 } from "../server/domain.ts";
 import { extract, mappedRows, pdfTables } from "../server/imports.ts";
@@ -51,14 +51,14 @@ test("hard exclusions remain in results and permutations never lose rows", () =>
   assert.equal(validOrder(["a", "a"], [o, { id: "b" }]), false);
   assert.equal(validOrder(["b", "a"], [o, { id: "b" }]), true);
 });
-test("calendar-month expiry clamps month end in Colombo and preserves clock time", () => {
+test("calendar-year expiry clamps month end in Colombo and preserves clock time", () => {
   assert.equal(
-    addMonth(new Date("2024-01-31T10:00:00Z")).toISOString(),
-    "2024-02-29T10:00:00.000Z",
+    addYear(new Date("2024-02-29T10:00:00Z")).toISOString(),
+    "2025-02-28T10:00:00.000Z",
   );
   assert.equal(
-    addMonth(new Date("2025-01-31T10:00:00Z")).toISOString(),
-    "2025-02-28T10:00:00.000Z",
+    addYear(new Date("2025-01-31T10:00:00Z")).toISOString(),
+    "2026-01-31T10:00:00.000Z",
   );
 });
 test("alternate headers, duplicate indexes, and vacancies preserve original data", async () => {

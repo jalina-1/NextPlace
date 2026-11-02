@@ -51,6 +51,8 @@ async function register(email: string) {
 test("full user-to-admin-to-finalized Excel workflow and access boundaries", async () => {
   try {
     cookie = await register("doctor@example.test");
+    assert.equal((await request("/pricing")).r.status, 403);
+    assert.equal((await request("/public")).body.price, undefined);
     const old = cookie;
     const login = await request("/login", "POST", {
       email: "doctor@example.test",
@@ -114,6 +116,7 @@ test("full user-to-admin-to-finalized Excel workflow and access boundaries", asy
     }
     assert.equal(p.status, "complete");
     assert.equal(p.results.length, 3);
+    assert.equal((await request("/pricing")).body.price, 5000);
     assert.equal(p.total, 6);
     const preview = p.results.map((r: any) => r.id).sort();
     const hidden = p.source.find((r: any) => !preview.includes(r.id)).id;

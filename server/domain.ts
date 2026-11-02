@@ -106,11 +106,11 @@ export function validOrder(ids: string[], options: any[]) {
     ids.every((id) => options.some((o) => o.id === id))
   );
 }
-export function addMonth(date: Date) {
+export function addYear(date: Date) {
   const d = new Date(date.getTime() + 330 * 60000);
   const day = d.getUTCDate();
   d.setUTCDate(1);
-  d.setUTCMonth(d.getUTCMonth() + 1);
+  d.setUTCFullYear(d.getUTCFullYear() + 1);
   const last = new Date(
     Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0),
   ).getUTCDate();

@@ -1,4 +1,4 @@
-# Transfer Compass
+# NextPlace
 
 A React / TypeScript application for Sri Lankan doctors to organize transfer preferences. Includes an Express API, PostgreSQL persistence, private files, a durable single-worker research queue, deterministic scoring, manual payment review, and finalized XLSX exports.
 
@@ -76,7 +76,7 @@ Provisional total is `sum(knownScore*weight)/sum(knownWeight)`. Coverage is the 
 
 Sessions use random 256-bit HttpOnly SameSite cookies; only a SHA-256 digest is stored. Passwords use the maintained `@node-rs/argon2` implementation. New logins replace the prior database session; protected requests check it every time. Roles, ownership, preview IDs, premium expiry, comparisons, chat context, and export are server-enforced.
 
-Approvals lock payment and user rows in a transaction. A payment can grant access only once. Renewal starts at the later of now and existing expiry. Add one calendar month in **Asia/Colombo**, clamping the day at the end of shorter months, preserving local time. Timestamps are stored as PostgreSQL timestamptz. Expiry never deletes orders.
+Approvals lock payment and user rows in a transaction. A payment can grant access only once. Renewal starts at the later of now and existing expiry. Add one calendar year in **Asia/Colombo**, clamping the day at the end of non-leap years, preserving local time. Timestamps are stored as PostgreSQL timestamptz. Expiry never deletes orders.
 
 Source values and source-row provenance remain attached to unique internal IDs. Duplicate INDEX values are allowed; VACANCIES is not expanded. CSV/XLSX data are preserved, not workbook appearance, formulas, macros, or formatting. PDF extraction is heuristic and requires manual review. Files are limited to 10 MB; PDFs to 100 pages; worksheets to 2,000 rows. Type signatures/extensions are validated. Spreadsheet exports escape formula-like untrusted text.
 
