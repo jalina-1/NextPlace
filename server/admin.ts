@@ -1,4 +1,4 @@
-import { init, query } from "./db.ts";
+import { init, query } from "./db.js";
 await init();
 const email = process.argv[2];
 if (!email) throw Error("Usage: npm run admin -- registered-email");

@@ -1,4 +1,4 @@
-import { readWorkbook } from "./workbook.ts";
+import { readWorkbook } from "./workbook.js";
 import yauzl from "yauzl";
 async function checkArchive(buffer: Buffer) {
   await new Promise<void>((resolve, reject) =>

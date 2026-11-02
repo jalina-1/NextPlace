@@ -6,9 +6,9 @@ import { hash, verify } from "@node-rs/argon2";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { writeWorkbook } from "./workbook.ts";
+import { writeWorkbook } from "./workbook.js";
 import { z } from "zod";
-import { query, transaction, init, dataDir } from "./db.ts";
+import { query, transaction, init, dataDir } from "./db.js";
 import {
   defaults,
   preferencesSchema,
@@ -16,11 +16,11 @@ import {
   validOrder,
   addYear,
   safeCell,
-} from "./domain.ts";
-import { putPrivate, getPrivate, deletePrivate } from "./storage.ts";
-import { extract, mappedRows } from "./imports.ts";
-import { research, researchLocation, aiProposal } from "./providers.ts";
-import { advanceJob } from "./jobs.ts";
+} from "./domain.js";
+import { putPrivate, getPrivate, deletePrivate } from "./storage.js";
+import { extract, mappedRows } from "./imports.js";
+import { research, researchLocation, aiProposal } from "./providers.js";
+import { advanceJob } from "./jobs.js";
 await init();
 export const app = express();
 app.disable("x-powered-by");

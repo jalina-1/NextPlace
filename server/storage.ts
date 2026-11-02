@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { dataDir } from "./db.ts";
+import { dataDir } from "./db.js";
 const bucket =
   process.env.SUPABASE_STORAGE_BUCKET || "transfer-compass-private";
 function config() {

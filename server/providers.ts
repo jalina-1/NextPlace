@@ -1,4 +1,4 @@
-import { query } from "./db.ts";
+import { query } from "./db.js";
 import { createHash } from "node:crypto";
 function evidence(
   value: any,
