@@ -279,6 +279,9 @@ export const analysisRun = pgTable("analysis_run", {
   level: text("level").notNull(), // preview | full
   optionCount: integer("option_count").notNull(),
   evaluatedOptionCount: integer("evaluated_option_count").notNull(),
+  /** Options whose institutions were researched in this run (preview runs may be limited). */
+  evaluatedOptionIds: jsonb("evaluated_option_ids").$type<string[]>().notNull().default([]),
+  createdBy: text("created_by").notNull(),
   totalTasks: integer("total_tasks").notNull().default(0),
   doneTasks: integer("done_tasks").notNull().default(0),
   failedTasks: integer("failed_tasks").notNull().default(0),

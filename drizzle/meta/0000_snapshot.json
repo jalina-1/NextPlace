@@ -1,5 +1,5 @@
 {
-  "id": "a79bf49f-6c25-47c6-ba2e-daf7101168fa",
+  "id": "f23f7402-656d-41cd-8b17-e0c20eed10f3",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -419,6 +419,19 @@
         "evaluated_option_count": {
           "name": "evaluated_option_count",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evaluated_option_ids": {
+          "name": "evaluated_option_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },

@@ -2,7 +2,8 @@ import { defineConfig } from "vitest/config";
 import path from "node:path";
 
 export default defineConfig({
-  resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+  resolve: { alias: { "@": path.resolve(__dirname, "src"), "next/headers": "next/headers.js", "server-only": path.resolve(__dirname, "tests/helpers/empty.ts") } },
+  server: { deps: { inline: ["better-auth"] } },
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",

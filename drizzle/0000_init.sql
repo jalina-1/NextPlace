@@ -57,6 +57,8 @@ CREATE TABLE "analysis_run" (
 	"level" text NOT NULL,
 	"option_count" integer NOT NULL,
 	"evaluated_option_count" integer NOT NULL,
+	"evaluated_option_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"created_by" text NOT NULL,
 	"total_tasks" integer DEFAULT 0 NOT NULL,
 	"done_tasks" integer DEFAULT 0 NOT NULL,
 	"failed_tasks" integer DEFAULT 0 NOT NULL,
