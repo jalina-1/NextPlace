@@ -8,6 +8,7 @@ export type Me =
       session: "active";
       user: { id: string; email: string; name: string; role: "user" | "admin" };
       access: { premium: boolean; activeUntil: string | null; pendingPayment: boolean; lastRejected: { at: string | null; note: string | null } | null; expiredAt: string | null };
+      adminPath?: string;
     };
 
 const Ctx = createContext<{ me: Me | null; refresh: () => Promise<void> }>({ me: null, refresh: async () => {} });

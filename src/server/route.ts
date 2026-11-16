@@ -20,7 +20,13 @@ export function userRoute(fn: (args: { req: Request; user: CurrentUser; params: 
 
 export function adminRoute(fn: (args: { req: Request; user: CurrentUser; params: Record<string, string> }) => Promise<unknown>) {
   return handle(async (req: Request, ctx: Ctx) => {
-    const user = await requireAdmin(req.headers);
+    // Anyone who is not a signed-in administrator gets "not found", so the admin API cannot be probed.
+    let user: CurrentUser;
+    try {
+      user = await requireAdmin(req.headers);
+    } catch {
+      throw errors.notFound();
+    }
     await rateLimit(`a:${user.id}`, 240, 60);
     return fn({ req, user, params: await ctx.params });
   });

@@ -13,11 +13,13 @@ import { chromium, type Browser, type Page } from "playwright";
 
 const PORT = 3100;
 const BASE = `http://localhost:${PORT}`;
+const ADMIN_SLUG = "console-e2e-7f3a";
 const OUT = path.resolve("e2e/output");
 const DB = process.env.E2E_DATABASE_URL ?? "postgresql://np:np@localhost:5432/nextplace_e2e";
 mkdirSync(OUT, { recursive: true });
 
 const env: NodeJS.ProcessEnv = {
+  ADMIN_PATH: ADMIN_SLUG,
   ...process.env,
   DATABASE_URL: DB,
   NODE_ENV: "production",
@@ -96,7 +98,7 @@ async function main() {
     const ap = await adminCtx.newPage();
     await register(ap, "Admin", "admin@e2e.test");
     execSync("npx tsx scripts/promote-admin.ts admin@e2e.test", { env: { ...env, NODE_ENV: "development" } as NodeJS.ProcessEnv, stdio: "inherit" });
-    await ap.goto(`${BASE}/admin`);
+    await ap.goto(`${BASE}/${ADMIN_SLUG}`);
     await ap.getByRole("tab", { name: "Settings" }).click();
     await ap.getByLabel("Bank Name").fill("Example Test Bank (E2E)");
     await ap.getByLabel("Account Name").fill("E2E Test Account");
@@ -203,7 +205,7 @@ async function main() {
     await shot(page, "06-payment-pending");
 
     step("Admin reviews the receipt and approves (twice — idempotent)");
-    await ap.goto(`${BASE}/admin`);
+    await ap.goto(`${BASE}/${ADMIN_SLUG}`);
     await ap.getByRole("tab", { name: "Payments" }).click();
     await ap.getByText("doctor@e2e.test").waitFor();
     await ap.getByRole("button", { name: "View receipt" }).click();
@@ -216,7 +218,11 @@ async function main() {
     assert(again.alreadyApproved === true, "second approval is a no-op");
     assert(paymentsAfter.grants.length === 1, "exactly one access grant");
     const forbidden = await page.evaluate(async () => (await fetch("/api/admin/payments")).status);
-    assert(forbidden === 403, "ordinary users cannot call admin APIs");
+    assert(forbidden === 404, "ordinary users cannot call admin APIs");
+    assert((await page.goto(`${BASE}/admin`))!.status() === 404, "the plain /admin address does not exist");
+    const anon = await browser.newContext();
+    assert((await (await anon.newPage()).goto(`${BASE}/${ADMIN_SLUG}`))!.status() === 404, "the private admin address is hidden from signed-out visitors");
+    await anon.close();
     await shot(ap, "07-admin-approved");
 
     step("Admin CRM: find the user, verify the account, see the paid access");
@@ -227,7 +233,7 @@ async function main() {
     await ap.getByText("Account verified.").waitFor();
     assert(await ap.getByText("Paid", { exact: true }).first().isVisible(), "user shows as paid after approval");
     const blocked = await page.evaluate(async () => (await fetch("/api/admin/users")).status);
-    assert(blocked === 403, "ordinary users cannot open the CRM");
+    assert(blocked === 404, "ordinary users cannot open the CRM");
     await shot(ap, "07b-admin-user");
 
     step("Full results after approval");

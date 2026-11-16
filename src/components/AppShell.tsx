@@ -139,7 +139,7 @@ function Sidebar({ collapsed, onToggle, onNavigate, mobile }: { collapsed: boole
           badge={user && !user.access.premium ? <span className={cx("h-2 w-2 rounded-full bg-amber-500", collapsed && "absolute right-2 top-2")} aria-hidden /> : null}
         />
         <NavItem href="/account" icon={UserRound} label="Account & privacy" active={path === "/account"} collapsed={collapsed} onClick={onNavigate} />
-        {user?.user.role === "admin" && <NavItem href="/admin" icon={ShieldCheck} label="Admin" active={path === "/admin"} collapsed={collapsed} onClick={onNavigate} />}
+        {user?.user.role === "admin" && user.adminPath && <NavItem href={user.adminPath} icon={ShieldCheck} label="Admin" active={path === user.adminPath} collapsed={collapsed} onClick={onNavigate} />}
       </nav>
       <div className={cx("flex items-center gap-3 border-t border-navy-100 py-4", collapsed && "flex-col")}>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-100 text-sm font-semibold text-navy-900" aria-hidden>
@@ -197,7 +197,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (PUBLIC.includes(path) || me?.session !== "active") return <PublicShell>{children}</PublicShell>;
   const stepKey = path.split("/")[3];
   const step = ALL_STEPS.find((s) => s.key === stepKey);
-  const crumb = project && step ? step.label : path.startsWith("/admin") ? "Admin" : path.startsWith("/payment") ? "Full access" : path.startsWith("/account") ? "Account & privacy" : "My projects";
+  const crumb = project && step ? step.label : (me?.session === "active" && me.adminPath && path.startsWith(me.adminPath)) ? "Admin" : path.startsWith("/payment") ? "Full access" : path.startsWith("/account") ? "Account & privacy" : "My projects";
   return (
     <div className="flex min-h-screen">
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2">Skip to content</a>
