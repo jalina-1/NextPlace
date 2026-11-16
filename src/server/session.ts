@@ -56,7 +56,7 @@ async function readSessionCookie(h: Headers): Promise<string | null> {
 export async function requireUser(h?: Headers): Promise<CurrentUser> {
   const s = await getSessionState(h);
   if (s.status === "active") return s.user;
-  if (s.status === "replaced") throw errors.unauthorized("session_replaced", "You were signed out because your account signed in on another device or browser.");
+  if (s.status === "replaced") throw errors.unauthorized("session_replaced", "You were signed out because your account signed in on another device. One account can be signed in on one phone and one computer at a time.");
   throw errors.unauthorized();
 }
 

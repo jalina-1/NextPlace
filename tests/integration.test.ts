@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll } from "vitest";
 import ExcelJS from "exceljs";
 import { eq } from "drizzle-orm";
 import { resetDb } from "./helpers/db";
-import { signUp, signIn, makeAdmin } from "./helpers/users";
+import { signUp, signIn, makeAdmin, cookieFrom } from "./helpers/users";
+import { auth } from "@/server/auth";
 import { makeXlsx } from "./helpers/fixtures";
 import { db, schema } from "@/server/db";
 import { getSessionState, requireUser } from "@/server/session";
@@ -102,6 +103,36 @@ describe("authentication", () => {
     expect(err.code).toBe("session_replaced");
     const sessions = await db.select().from(schema.session).where(eq(schema.session.userId, bob.user.id));
     expect(sessions).toHaveLength(1);
+  });
+});
+
+describe("devices", () => {
+  const PC = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130 Safari/537.36";
+  const PC2 = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) Safari/605.1.15";
+  const PHONE = "Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/130 Mobile Safari/537.36";
+  const PHONE2 = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148 Safari/604.1";
+  const login = async (ua: string) => {
+    const res = await auth.api.signInEmail({ body: { email: "bob@example.com", password: "correct-horse-battery" }, headers: new Headers({ "user-agent": ua }), asResponse: true });
+    return new Headers({ cookie: cookieFrom(res) });
+  };
+  const state = async (h: Headers) => (await getSessionState(h)).status;
+
+  it("keeps one phone and one computer signed in, and replaces a second device of the same kind", async () => {
+    const pc = await login(PC);
+    const phone = await login(PHONE);
+    expect([await state(pc), await state(phone)]).toEqual(["active", "active"]);
+    const pc2 = await login(PC2);
+    expect([await state(pc), await state(pc2), await state(phone)]).toEqual(["replaced", "active", "active"]);
+    const phone2 = await login(PHONE2);
+    expect([await state(phone), await state(phone2), await state(pc2)]).toEqual(["replaced", "active", "active"]);
+    expect(await db.select().from(schema.session).where(eq(schema.session.userId, bob.user.id))).toHaveLength(2);
+  });
+
+  it("sends a welcome email that warns not to share the account", async () => {
+    const mail = await db.select().from(schema.emailOutbox).where(eq(schema.emailOutbox.to, "bob@example.com"));
+    expect(mail).toHaveLength(1);
+    expect(mail[0].subject).toMatch(/Welcome to NextPlace/);
+    expect(mail[0].body).toMatch(/Do not share your password/);
   });
 });
 

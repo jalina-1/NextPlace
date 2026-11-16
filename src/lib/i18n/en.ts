@@ -29,7 +29,7 @@ export const en = {
   "auth.forgot": "Forgot password?",
   "auth.reset.request": "Send reset link",
   "auth.reset.set": "Set new password",
-  "auth.replaced": "You were signed out because your account signed in on another device or browser. Only one active session is allowed per account.",
+  "auth.replaced": "You were signed out because your account signed in on another device. One account can be signed in on one phone and one computer at a time.",
   "auth.passwordHint": "At least 10 characters.",
   "common.save": "Save",
   "common.saving": "Saving…",

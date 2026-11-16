@@ -48,7 +48,7 @@ export default function AccountPage() {
           <div><dt className="text-navy-700">Email</dt><dd>{me.user.email}</dd></div>
           <div><dt className="text-navy-700">Access</dt><dd>{me.access.premium ? `Full access until ${formatColombo(me.access.activeUntil)}` : "Free preview"}</dd></div>
         </dl>
-        <p className="mt-3 text-xs text-navy-700">Only one active session is allowed. Signing in elsewhere signs you out here. <Link className="underline" href="/payment">Payments</Link></p>
+        <p className="mt-3 text-xs text-navy-700">You can stay signed in on one phone and one computer. Signing in on another phone or computer signs out the earlier one. <Link className="underline" href="/payment">Payments</Link></p>
       </Card>
       <Card title="Change password">
         <form onSubmit={changePw} className="grid gap-3 sm:grid-cols-2">

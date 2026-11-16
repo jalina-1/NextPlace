@@ -8,6 +8,11 @@ import { env } from "./env-core";
 import { sendEmail } from "./services/email";
 import { audit } from "./services/audit";
 
+/** "phone" for phones and tablets, "pc" for everything else. */
+export function deviceKind(userAgent: string | null | undefined): "phone" | "pc" {
+  return /Mobi|Android|iPhone|iPad|iPod|Tablet|Silk|Kindle|Windows Phone/i.test(userAgent ?? "") ? "phone" : "pc";
+}
+
 export function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -54,6 +59,21 @@ export const auth = betterAuth({
     useSecureCookies: env.appUrl.startsWith("https://"),
   },
   databaseHooks: {
+    user: {
+      create: {
+        async after(u) {
+          try {
+            await sendEmail({
+              to: u.email,
+              subject: "Welcome to NextPlace — keep your account private",
+              body: `Hello ${u.name},\n\nYour NextPlace account was created with this email address (${u.email}).\n\nPlease keep this account to yourself:\n- Do not share your password or sign-in details with anyone. Your account holds your personal information, your vacancy lists and your payment receipts, and anyone who signs in can see them.\n- One account can be signed in on one phone and one computer at a time. Signing in on another phone or computer signs out the earlier one.\n- NextPlace staff will never ask for your password.\n\nIf you did not create this account, reply to this email.\n\nNextPlace`,
+            });
+          } catch {
+            /* a failed welcome email must never block registration */
+          }
+        },
+      },
+    },
     session: {
       create: {
         // A suspended account cannot sign in.
@@ -61,12 +81,17 @@ export const auth = betterAuth({
           const [u] = await db.select({ status: schema.user.status }).from(schema.user).where(eq(schema.user.id, newSession.userId)).limit(1);
           if (u?.status === "suspended") throw new APIError("FORBIDDEN", { message: "This account has been suspended. Please contact support." });
         },
-        // One active session per account: a new login revokes all previous sessions server-side.
+        // One phone and one computer per account: a new login replaces the previous session
+        // of the same kind of device, so at most two devices are signed in at once.
         async after(newSession) {
-          const old = await db
-            .select({ id: schema.session.id, token: schema.session.token })
+          const others = await db
+            .select({ id: schema.session.id, token: schema.session.token, userAgent: schema.session.userAgent, createdAt: schema.session.createdAt })
             .from(schema.session)
             .where(and(eq(schema.session.userId, newSession.userId), ne(schema.session.id, newSession.id)));
+          const kind = deviceKind(newSession.userAgent);
+          const keep = others.filter((o) => deviceKind(o.userAgent) !== kind).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+          // Same kind of device → replaced. Anything beyond one other device → replaced too.
+          const old = [...others.filter((o) => deviceKind(o.userAgent) === kind), ...keep.slice(1)];
           if (old.length === 0) return;
           await db.transaction(async (tx) => {
             for (const s of old) {
