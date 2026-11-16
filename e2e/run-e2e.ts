@@ -193,7 +193,7 @@ async function main() {
     step("Payment step shows price and accepts a receipt");
     await page.getByRole("link", { name: "See how to unlock" }).click();
     await page.getByText("LKR 5,000").waitFor();
-    assert(await page.getByText("one year").count(), "price shows LKR 5,000 for one year");
+    assert(await page.getByText("10 months").count(), "price shows LKR 5,000 for 10 months");
     await page.getByLabel("Payment method").selectOption("atm_deposit");
     await page.getByLabel(/Reference/).fill("ATM-E2E-1");
     await page.setInputFiles("#rcpt", { name: "receipt.png", mimeType: "image/png", buffer: Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000", "hex") });

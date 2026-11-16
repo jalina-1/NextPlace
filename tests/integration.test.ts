@@ -220,7 +220,7 @@ describe("payments and access", () => {
     expect(results.every((r) => r.status === "fulfilled")).toBe(true);
     const grants = await db.select().from(schema.accessGrant).where(eq(schema.accessGrant.userId, alice.user.id));
     expect(grants).toHaveLength(1);
-    expect(grants[0].endsAt.toISOString()).toBe(addCalendarMonthsColombo(at, 12).toISOString());
+    expect(grants[0].endsAt.toISOString()).toBe(addCalendarMonthsColombo(at, 10).toISOString());
     await expectHttp(rejectPayment(paymentId, admin, "late"), 409);
   });
 
@@ -228,8 +228,8 @@ describe("payments and access", () => {
     const { id } = await submitPayment(alice.user, { method: "bank_transfer" }, { name: "r2.png", bytes: PNG });
     const at = new Date("2027-05-01T00:00:00Z");
     const { grant } = await approvePayment(id, admin, undefined, at);
-    expect(grant!.startsAt.toISOString()).toBe(addCalendarMonthsColombo(new Date("2026-11-02T04:30:00Z"), 12).toISOString());
-    expect(grant!.endsAt.toISOString()).toBe(addCalendarMonthsColombo(grant!.startsAt, 12).toISOString());
+    expect(grant!.startsAt.toISOString()).toBe(addCalendarMonthsColombo(new Date("2026-11-02T04:30:00Z"), 10).toISOString());
+    expect(grant!.endsAt.toISOString()).toBe(addCalendarMonthsColombo(grant!.startsAt, 10).toISOString());
     expect(await hasPremium(alice.user.id, new Date("2028-12-01T00:00:00Z"))).toBe(false);
     const [p] = await db.select().from(schema.project).where(eq(schema.project.id, projectId));
     expect(p).toBeTruthy();

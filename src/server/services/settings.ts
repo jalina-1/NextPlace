@@ -30,7 +30,7 @@ export type Settings = z.infer<typeof settingsSchema>;
 
 export const DEFAULT_SETTINGS: Settings = {
   priceLkr: 5000,
-  accessMonths: 12,
+  accessMonths: 10,
   requireVerifiedAccounts: false,
   bank: { configured: false, bankName: "", branch: "", accountName: "", accountNumber: "", instructions: "" },
   quotas: {
