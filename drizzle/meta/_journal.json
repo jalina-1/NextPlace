@@ -29,6 +29,13 @@
       "when": 1793637548288,
       "tag": "0003_bot_finding",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794848864403,
+      "tag": "0004_admin_crm",
+      "breakpoints": true
     }
   ]
 }

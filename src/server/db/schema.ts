@@ -32,6 +32,9 @@ export const user = pgTable("user", {
   image: text("image"),
   /** "user" | "admin". Never settable through sign-up or profile APIs. */
   role: text("role").notNull().default("user"),
+  /** "active" | "suspended". Only an administrator can change it. */
+  status: text("status").notNull().default("active"),
+  suspendedReason: text("suspended_reason"),
   createdAt: now("created_at"),
   updatedAt: now("updated_at"),
 });
@@ -454,6 +457,10 @@ export const accessGrant = pgTable(
     months: integer("months").notNull(),
     createdBy: text("created_by").notNull(),
     note: text("note"),
+    /** Set when an administrator takes the access away; revoked grants never count. */
+    revokedAt: ts("revoked_at"),
+    revokedBy: text("revoked_by"),
+    revokeReason: text("revoke_reason"),
     createdAt: now("created_at"),
   },
   (t) => [index("access_grant_user_idx").on(t.userId, t.endsAt)],
@@ -513,4 +520,19 @@ export const botFinding = pgTable(
     createdAt: now("created_at"),
   },
   (t) => [index("bot_finding_project_idx").on(t.projectId, t.optionId)],
+);
+
+/** Private administrator notes about a user (CRM). Never shown to the user. */
+export const userNote = pgTable(
+  "user_note",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    authorId: text("author_id"),
+    body: text("body").notNull(),
+    createdAt: now("created_at"),
+  },
+  (t) => [index("user_note_user_idx").on(t.userId, t.createdAt)],
 );

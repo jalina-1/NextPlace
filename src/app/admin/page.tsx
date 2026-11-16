@@ -4,12 +4,14 @@ import { api, errMsg } from "@/lib/client/api";
 import { useSession } from "@/lib/client/session";
 import { Alert, Badge, Button, Card, Field, Input, NumberInput, Select, Spinner, Tabs, Textarea } from "@/components/ui";
 import { formatColombo } from "@/lib/dates";
+import { Users } from "@/components/admin/Users";
 
 type Payment = { id: string; email: string; name: string; method: string; amountLkr: number; reference: string | null; paidOn: string | null; status: string; userNote: string | null; adminNote: string | null; receiptMime: string; createdAt: string; reviewedAt: string | null; accessUntil: string | null };
-type Grant = { id: string; email: string; startsAt: string; endsAt: string; months: number; paymentId: string | null; createdAt: string };
+type Grant = { id: string; email: string; startsAt: string; endsAt: string; months: number; paymentId: string | null; revokedAt: string | null; createdAt: string };
 type Settings = {
   priceLkr: number;
   accessMonths: number;
+  requireVerifiedAccounts: boolean;
   bank: { configured: boolean; bankName: string; branch: string; accountName: string; accountNumber: string; instructions: string };
   quotas: Record<string, number>;
   jobs: { concurrency: number; maxAttempts: number };
@@ -96,7 +98,7 @@ function Payments() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-xs text-navy-700"><tr><th className="py-1">User</th><th>Starts</th><th>Ends</th><th>Months</th><th>Payment</th></tr></thead>
-            <tbody>{data.grants.map((g) => <tr key={g.id} className="border-t border-navy-100"><td className="py-1">{g.email}</td><td>{formatColombo(g.startsAt)}</td><td>{formatColombo(g.endsAt)}</td><td>{g.months}</td><td className="text-xs">{g.paymentId?.slice(0, 8) ?? "manual"}</td></tr>)}</tbody>
+            <tbody>{data.grants.map((g) => <tr key={g.id} className="border-t border-navy-100"><td className="py-1">{g.email}</td><td>{formatColombo(g.startsAt)}</td><td>{formatColombo(g.endsAt)}</td><td>{g.months}</td><td className="text-xs">{g.paymentId?.slice(0, 8) ?? "manual"}{g.revokedAt ? " · removed" : ""}</td></tr>)}</tbody>
           </table>
         </div>
       </Card>
@@ -127,6 +129,12 @@ function SettingsPanel() {
           <Field label="Price (LKR)" htmlFor="price"><NumberInput id="price" integer min={0} max={1000000} value={s.priceLkr} onValue={(n) => setS({ ...s, priceLkr: n })} /></Field>
           <Field label="Access period (calendar months)" htmlFor="months"><NumberInput id="months" integer min={1} max={36} value={s.accessMonths} onValue={(n) => setS({ ...s, accessMonths: n })} /></Field>
         </div>
+      </Card>
+      <Card title="Account approval">
+        <label className="flex items-start gap-3 text-sm">
+          <input type="checkbox" className="mt-1 h-4 w-4 accent-teal-700" checked={s.requireVerifiedAccounts} onChange={(e) => setS({ ...s, requireVerifiedAccounts: e.target.checked })} />
+          <span><span className="font-medium text-navy-950">Only accounts I have verified can use the site</span><span className="block text-xs text-navy-700">When this is on, a new user can sign up but cannot do anything until you press “Verify account” on their page in Users.</span></span>
+        </label>
       </Card>
       <Card title="Bank instructions">
         <p className="mb-3 text-xs text-navy-700">Shown to users only on the payment step. Payments cannot be submitted until bank name, account name and account number are filled in.</p>
@@ -179,17 +187,30 @@ function Jobs() {
   );
 }
 
+const STAT_LABELS: [string, string, boolean?][] = [
+  ["users", "Users"],
+  ["newUsers7d", "New this week"],
+  ["verified", "Verified"],
+  ["suspended", "Suspended"],
+  ["paidUsers", "With paid access"],
+  ["pendingPayments", "Payments waiting"],
+  ["revenueLkr", "Approved payments (LKR)", true],
+  ["revenue30dLkr", "Last 30 days (LKR)", true],
+  ["projects", "Projects"],
+  ["failedJobs", "Failed jobs"],
+];
+
 function Overview() {
-  const [d, setD] = useState<{ counts: Record<string, number>; health: { database: { ok: boolean; detail: string }; storage: { ok: boolean; detail: string }; providers: { capability: string; provider: string; configured: boolean; demo?: boolean }[] } } | null>(null);
+  const [d, setD] = useState<{ stats: Record<string, number>; health: { database: { ok: boolean; detail: string }; storage: { ok: boolean; detail: string }; providers: { capability: string; provider: string; configured: boolean; demo?: boolean }[] } } | null>(null);
   useEffect(() => {
     api<typeof d>("/api/admin/overview").then(setD);
   }, []);
   if (!d) return <Spinner />;
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {Object.entries(d.counts).map(([k, v]) => (
-          <div key={k} className="rounded-lg bg-white p-3 ring-1 ring-navy-100"><p className="text-xs text-navy-700">{k.replace(/_/g, " ")}</p><p className="text-2xl font-semibold tabular">{v}</p></div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {STAT_LABELS.map(([k, label, money]) => (
+          <div key={k} className="rounded-xl bg-white p-3 ring-1 ring-navy-100"><p className="text-xs text-navy-700">{label}</p><p className="text-2xl font-semibold tabular">{money ? Number(d.stats[k] ?? 0).toLocaleString("en-LK") : d.stats[k] ?? 0}</p></div>
         ))}
       </div>
       <Card title="Connections">
@@ -236,13 +257,14 @@ function AuditPanel() {
 
 export default function AdminPage() {
   const { me } = useSession();
-  const [tab, setTab] = useState<"overview" | "payments" | "settings" | "jobs" | "audit">("payments");
+  const [tab, setTab] = useState<"overview" | "users" | "payments" | "settings" | "jobs" | "audit">("overview");
   if (!me) return <div className="mx-auto max-w-6xl px-4 py-8"><Spinner /></div>;
   if (me.session !== "active" || me.user.role !== "admin") return <div className="mx-auto max-w-6xl px-4 py-8"><Alert tone="error">Administrators only.</Alert></div>;
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 py-8">
       <h1 className="text-2xl font-semibold text-navy-900">Admin</h1>
-      <Tabs label="Admin sections" value={tab} onChange={setTab} items={[{ value: "payments", label: "Payments & access" }, { value: "overview", label: "Overview & providers" }, { value: "settings", label: "Settings" }, { value: "jobs", label: "Failed jobs" }, { value: "audit", label: "Audit" }]} />
+      <Tabs label="Admin sections" value={tab} onChange={setTab} items={[{ value: "overview", label: "Dashboard" }, { value: "users", label: "Users" }, { value: "payments", label: "Payments" }, { value: "settings", label: "Settings" }, { value: "jobs", label: "Failed jobs" }, { value: "audit", label: "Audit" }]} />
+      {tab === "users" && <Users />}
       {tab === "payments" && <Payments />}
       {tab === "overview" && <Overview />}
       {tab === "settings" && <SettingsPanel />}

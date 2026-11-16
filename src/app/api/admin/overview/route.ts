@@ -1,5 +1,6 @@
 import { adminRoute } from "@/server/route";
-import { adminOverview, healthCheck } from "@/server/services/admin";
+import { healthCheck } from "@/server/services/admin";
+import { dashboardStats } from "@/server/services/crm";
 
 export const dynamic = "force-dynamic";
-export const GET = adminRoute(async () => ({ counts: await adminOverview(), health: await healthCheck() }));
+export const GET = adminRoute(async () => ({ stats: await dashboardStats(), health: await healthCheck() }));

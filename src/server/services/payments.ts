@@ -6,7 +6,7 @@
  *  - access_grant.payment_id is UNIQUE, so one payment can never create two grants.
  * Renewal while active extends from the current expiry. Periods are calendar months in Asia/Colombo.
  */
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "../db";
 import { errors } from "../http";
@@ -101,7 +101,7 @@ export async function approvePayment(paymentId: string, admin: CurrentUser, note
     const [latest] = await tx
       .select({ endsAt: schema.accessGrant.endsAt })
       .from(schema.accessGrant)
-      .where(eq(schema.accessGrant.userId, p.userId))
+      .where(and(eq(schema.accessGrant.userId, p.userId), isNull(schema.accessGrant.revokedAt)))
       .orderBy(desc(schema.accessGrant.endsAt))
       .limit(1);
     const startsAt = latest && latest.endsAt > at ? latest.endsAt : at;

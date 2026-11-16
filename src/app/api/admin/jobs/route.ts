@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 export const GET = adminRoute(async () => ({ jobs: await listFailedJobs() }));
 export const POST = adminRoute(async ({ req, user }) => {
-  assertSameOrigin(req);
+  assertSameOrigin(req, true);
   const body = z.object({ action: z.enum(["retry", "run"]), jobId: z.string().max(64).optional() }).parse(await readJson(req));
   if (body.action === "retry" && body.jobId) {
     const ok = await retryJob(body.jobId);

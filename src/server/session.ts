@@ -4,7 +4,7 @@ import { auth, hashToken } from "./auth";
 import { db, schema } from "./db";
 import { errors } from "./http";
 
-export type CurrentUser = { id: string; email: string; name: string; role: "user" | "admin" };
+export type CurrentUser = { id: string; email: string; name: string; role: "user" | "admin"; verified?: boolean };
 
 export type SessionState =
   | { status: "active"; user: CurrentUser }
@@ -18,8 +18,10 @@ export async function getSessionState(h?: Headers): Promise<SessionState> {
   const hdrs = h ?? (await nextHeaders());
   const s = await auth.api.getSession({ headers: hdrs });
   if (s?.user) {
+    // Defence in depth: a suspended account is never treated as signed in.
+    if ((s.user as { status?: string }).status === "suspended") return { status: "anonymous" };
     const role = (s.user as { role?: string }).role === "admin" ? "admin" : "user";
-    return { status: "active", user: { id: s.user.id, email: s.user.email, name: s.user.name, role } };
+    return { status: "active", user: { id: s.user.id, email: s.user.email, name: s.user.name, role, verified: !!s.user.emailVerified } };
   }
   const raw = await readSessionCookie(hdrs);
   if (raw) {

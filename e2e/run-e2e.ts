@@ -204,6 +204,7 @@ async function main() {
 
     step("Admin reviews the receipt and approves (twice — idempotent)");
     await ap.goto(`${BASE}/admin`);
+    await ap.getByRole("tab", { name: "Payments" }).click();
     await ap.getByText("doctor@e2e.test").waitFor();
     await ap.getByRole("button", { name: "View receipt" }).click();
     ap.on("dialog", (d) => d.accept());
@@ -217,6 +218,17 @@ async function main() {
     const forbidden = await page.evaluate(async () => (await fetch("/api/admin/payments")).status);
     assert(forbidden === 403, "ordinary users cannot call admin APIs");
     await shot(ap, "07-admin-approved");
+
+    step("Admin CRM: find the user, verify the account, see the paid access");
+    await ap.getByRole("tab", { name: "Users" }).click();
+    await ap.getByLabel("Search users").fill("doctor@");
+    await ap.getByRole("button", { name: /doctor@e2e\.test/ }).click();
+    await ap.getByRole("button", { name: "Verify account" }).click();
+    await ap.getByText("Account verified.").waitFor();
+    assert(await ap.getByText("Paid", { exact: true }).first().isVisible(), "user shows as paid after approval");
+    const blocked = await page.evaluate(async () => (await fetch("/api/admin/users")).status);
+    assert(blocked === 403, "ordinary users cannot open the CRM");
+    await shot(ap, "07b-admin-user");
 
     step("Full results after approval");
     await page.goto(`${BASE}/projects/${projectId}/results`);

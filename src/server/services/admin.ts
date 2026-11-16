@@ -1,19 +1,7 @@
-import { desc, eq, sql, inArray } from "drizzle-orm";
+import { and, desc, eq, sql, inArray, isNull } from "drizzle-orm";
 import { db, schema } from "../db";
 import { providerStatus } from "../env-core";
 import { storage } from "../storage";
-
-export async function adminOverview() {
-  const counts = await db.execute(sql`
-    select
-      (select count(*)::int from "user") as users,
-      (select count(*)::int from project) as projects,
-      (select count(*)::int from payment where status = 'pending') as pending_payments,
-      (select count(*)::int from access_grant where starts_at <= now() and ends_at > now()) as active_grants,
-      (select count(*)::int from job where status = 'failed') as failed_jobs,
-      (select count(*)::int from job where status in ('queued','running')) as queued_jobs`);
-  return counts.rows[0];
-}
 
 export async function listPayments(status?: string) {
   const rows = await db
@@ -39,7 +27,7 @@ export async function listPayments(status?: string) {
     .orderBy(desc(schema.payment.createdAt))
     .limit(200);
   const userIds = Array.from(new Set(rows.map((r) => r.userId)));
-  const grants = userIds.length ? await db.select().from(schema.accessGrant).where(inArray(schema.accessGrant.userId, userIds)) : [];
+  const grants = userIds.length ? await db.select().from(schema.accessGrant).where(and(inArray(schema.accessGrant.userId, userIds), isNull(schema.accessGrant.revokedAt))) : [];
   return rows.map((r) => {
     const g = grants.filter((x) => x.userId === r.userId).sort((a, b) => b.endsAt.getTime() - a.endsAt.getTime());
     return { ...r, accessUntil: g[0]?.endsAt ?? null };
@@ -48,7 +36,7 @@ export async function listPayments(status?: string) {
 
 export async function listAccessGrants() {
   return db
-    .select({ id: schema.accessGrant.id, email: schema.user.email, startsAt: schema.accessGrant.startsAt, endsAt: schema.accessGrant.endsAt, months: schema.accessGrant.months, paymentId: schema.accessGrant.paymentId, createdAt: schema.accessGrant.createdAt })
+    .select({ id: schema.accessGrant.id, email: schema.user.email, startsAt: schema.accessGrant.startsAt, endsAt: schema.accessGrant.endsAt, months: schema.accessGrant.months, paymentId: schema.accessGrant.paymentId, revokedAt: schema.accessGrant.revokedAt, createdAt: schema.accessGrant.createdAt })
     .from(schema.accessGrant)
     .innerJoin(schema.user, eq(schema.user.id, schema.accessGrant.userId))
     .orderBy(desc(schema.accessGrant.createdAt))

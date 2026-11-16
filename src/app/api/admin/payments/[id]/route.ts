@@ -4,7 +4,7 @@ import { addPaymentNote, approvePayment, rejectPayment } from "@/server/services
 
 export const dynamic = "force-dynamic";
 export const POST = adminRoute(async ({ req, user, params }) => {
-  assertSameOrigin(req);
+  assertSameOrigin(req, true);
   const body = z.object({ action: z.enum(["approve", "reject", "note"]), note: z.string().max(1000).optional() }).parse(await readJson(req));
   if (body.action === "approve") return approvePayment(params.id, user, body.note);
   if (body.action === "reject") return rejectPayment(params.id, user, body.note ?? "");

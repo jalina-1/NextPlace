@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { and, eq, ne } from "drizzle-orm";
 import { createHash } from "node:crypto";
@@ -39,6 +40,7 @@ export const auth = betterAuth({
     additionalFields: {
       // input:false → cannot be supplied at sign-up or via profile updates.
       role: { type: "string", required: false, defaultValue: "user", input: false },
+      status: { type: "string", required: false, defaultValue: "active", input: false },
     },
   },
   session: {
@@ -54,6 +56,11 @@ export const auth = betterAuth({
   databaseHooks: {
     session: {
       create: {
+        // A suspended account cannot sign in.
+        async before(newSession) {
+          const [u] = await db.select({ status: schema.user.status }).from(schema.user).where(eq(schema.user.id, newSession.userId)).limit(1);
+          if (u?.status === "suspended") throw new APIError("FORBIDDEN", { message: "This account has been suspended. Please contact support." });
+        },
         // One active session per account: a new login revokes all previous sessions server-side.
         async after(newSession) {
           const old = await db

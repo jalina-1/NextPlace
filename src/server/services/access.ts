@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, lte } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lte } from "drizzle-orm";
 import { db, schema } from "../db";
 
 export type AccessStatus = {
@@ -13,7 +13,7 @@ export async function getAccess(userId: string, at = new Date()): Promise<Access
   const grants = await db
     .select()
     .from(schema.accessGrant)
-    .where(eq(schema.accessGrant.userId, userId))
+    .where(and(eq(schema.accessGrant.userId, userId), isNull(schema.accessGrant.revokedAt)))
     .orderBy(desc(schema.accessGrant.endsAt));
   const active = grants.find((g) => g.startsAt <= at && g.endsAt > at);
   const latestEnd = grants[0]?.endsAt ?? null;
@@ -41,7 +41,7 @@ export async function hasPremium(userId: string, at = new Date()): Promise<boole
   const r = await db
     .select({ id: schema.accessGrant.id })
     .from(schema.accessGrant)
-    .where(and(eq(schema.accessGrant.userId, userId), lte(schema.accessGrant.startsAt, at), gt(schema.accessGrant.endsAt, at)))
+    .where(and(eq(schema.accessGrant.userId, userId), isNull(schema.accessGrant.revokedAt), lte(schema.accessGrant.startsAt, at), gt(schema.accessGrant.endsAt, at)))
     .limit(1);
   return r.length > 0;
 }

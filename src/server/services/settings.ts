@@ -6,6 +6,8 @@ import { db, schema } from "../db";
 export const settingsSchema = z.object({
   priceLkr: z.number().int().min(0).max(1_000_000),
   accessMonths: z.number().int().min(1).max(36),
+  /** When on, only accounts verified by an administrator can use the app. */
+  requireVerifiedAccounts: z.boolean().default(false),
   bank: z.object({
     configured: z.boolean(),
     bankName: z.string().max(120),
@@ -29,6 +31,7 @@ export type Settings = z.infer<typeof settingsSchema>;
 export const DEFAULT_SETTINGS: Settings = {
   priceLkr: 5000,
   accessMonths: 12,
+  requireVerifiedAccounts: false,
   bank: { configured: false, bankName: "", branch: "", accountName: "", accountNumber: "", instructions: "" },
   quotas: {
     freeProjectsPerUser: 2,
