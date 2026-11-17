@@ -27,7 +27,7 @@
     "@google/genai": "^2.32.0",
     "@supabase/supabase-js": "^2.118.0",
     "@tanstack/react-virtual": "^3.14.25",
-    "better-auth": "^1.3.34",
+    "better-auth": "^1.7.25",
     "drizzle-orm": "^0.45.4",
     "exceljs": "^4.4.0",
     "lucide-react": "^0.468.0",
